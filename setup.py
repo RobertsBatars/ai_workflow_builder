@@ -14,7 +14,7 @@ setup(
     description="A node-based interface for creating AI agent workflows",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/ai-workflow-builder",
+    url="https://github.com/RobertsBatars/ai_workflow_builder",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -23,18 +23,18 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "pyside6>=6.0.0",
-        "litellm>=1.0.0",
-        "faiss-cpu>=1.7.0", 
-        "docker>=6.0.0",
-        "fastapi>=0.95.0",
-        "pydantic>=2.0.0",
-        "watchdog>=3.0.0",
-        "nodegraphqt>=0.5.0",
-        "uvicorn>=0.22.0",
-        "numpy>=1.20.0",
-        "aiohttp>=3.8.0",
-        "requests>=2.28.0"
+        "pyside6",
+        "litellm",
+        "faiss-cpu", 
+        "docker",
+        "fastapi",
+        "pydantic",
+        "watchdog",
+        "nodegraphqt",
+        "uvicorn",
+        "numpy",
+        "aiohttp",
+        "requests"
     ],
     entry_points={
         "console_scripts": [

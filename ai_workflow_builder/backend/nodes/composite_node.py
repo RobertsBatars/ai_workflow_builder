@@ -5,7 +5,8 @@ from typing import Dict, Any, List
 
 from .base import BaseNode, NodeRegistry
 from ...shared.models import CompositeNodeConfig
-from ..workflows import WorkflowRunner
+
+# Import WorkflowRunner dynamically during execute to avoid circular imports
 
 
 class CompositeNode(BaseNode):
@@ -48,6 +49,9 @@ class CompositeNode(BaseNode):
                 error_msg = "No sub-workflow specified for Composite node"
                 self.outputs["error"] = error_msg
                 return {"error": error_msg}
+            
+            # Import WorkflowRunner dynamically to avoid circular imports
+            from ..workflows import WorkflowRunner
             
             # Create a workflow runner for the sub-workflow
             runner = WorkflowRunner(self.workflow_json)
