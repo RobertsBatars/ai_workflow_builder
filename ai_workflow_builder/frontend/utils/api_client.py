@@ -178,7 +178,7 @@ class APIClient:
         while time.time() - start_time < timeout:
             status = self.get_workflow_status(workflow_id)
             
-            if status["status"] in ["completed", "failed"]:
+            if status["status"] in ["completed", "failed", "stopped"]:
                 return status
             
             time.sleep(poll_interval)
@@ -189,3 +189,82 @@ class APIClient:
             "status": "timeout",
             "error": f"Workflow execution timed out after {timeout} seconds"
         }
+        
+    def stop_workflow(self, workflow_id: str) -> Dict[str, Any]:
+        """
+        Stop a running workflow.
+        
+        Args:
+            workflow_id: The ID of the workflow to stop.
+            
+        Returns:
+            Dictionary with stop result.
+        """
+        url = f"{self.base_url}/workflow/stop/{workflow_id}"
+        
+        try:
+            response = requests.post(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "message": str(e)}
+            
+    def list_workflows(self) -> List[Dict[str, Any]]:
+        """
+        Get a list of all active workflows.
+        
+        Returns:
+            List of workflow information.
+        """
+        url = f"{self.base_url}/workflow/list"
+        
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            return response.json().get("workflows", [])
+        except requests.exceptions.RequestException:
+            return []
+    
+    def generate_workflow_from_text(self, description: str, model: str = "gpt-4") -> Dict[str, Any]:
+        """
+        Generate a workflow from a natural language description.
+        
+        Args:
+            description: Natural language description of the workflow
+            model: LLM model to use for generation
+            
+        Returns:
+            Dictionary containing the generated workflow
+        """
+        # For a complete implementation, we'd normally have a dedicated backend endpoint
+        # But for now, we'll use a direct approach by talking to the Python backend module
+        
+        try:
+            # First method: Try using a direct import if running in the same process
+            try:
+                import asyncio
+                from ...backend.workflows import WorkflowRunner
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                workflow_data = loop.run_until_complete(
+                    WorkflowRunner.generate_from_text(description, model)
+                )
+                loop.close()
+                
+                return workflow_data
+                
+            except ImportError:
+                # Second method: If import fails, use a custom endpoint
+                url = f"{self.base_url}/workflow/generate"
+                
+                response = requests.post(
+                    url,
+                    json={"description": description, "model": model},
+                    timeout=120  # Longer timeout for generation
+                )
+                response.raise_for_status()
+                return response.json()
+                
+        except Exception as e:
+            raise ValueError(f"Failed to generate workflow: {str(e)}")

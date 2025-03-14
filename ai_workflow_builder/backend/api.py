@@ -463,5 +463,39 @@ async def get_tools():
         )
 
 
+class WorkflowGenerationRequest(BaseModel):
+    """Request model for workflow generation."""
+    description: str
+    model: str = "gpt-4"
+
+
+@app.post("/workflow/generate", response_model=Dict[str, Any])
+async def generate_workflow(request: WorkflowGenerationRequest):
+    """
+    Generate a workflow from a natural language description.
+    
+    This endpoint uses AI to convert a textual description into a workflow configuration.
+    """
+    try:
+        logger.info(f"Generating workflow from description using {request.model}")
+        
+        # Generate workflow using WorkflowRunner
+        workflow_data = await WorkflowRunner.generate_from_text(
+            request.description, 
+            request.model
+        )
+        
+        logger.info(f"Successfully generated workflow with {len(workflow_data.get('nodes', []))} nodes")
+        
+        return workflow_data
+        
+    except Exception as e:
+        logger.error(f"Error generating workflow: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating workflow: {str(e)}"
+        )
+
+
 # Export ASGI app
 app_asgi = app

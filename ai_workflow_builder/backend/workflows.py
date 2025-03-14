@@ -272,3 +272,115 @@ class WorkflowRunner:
     def to_dict(self) -> Dict[str, Any]:
         """Convert the workflow to a dictionary representation."""
         return self.config.dict()
+        
+    @classmethod
+    async def generate_from_text(cls, description: str, model: str = "gpt-4") -> Dict[str, Any]:
+        """
+        Generate a workflow JSON from a natural language description.
+        
+        Args:
+            description: Natural language description of the desired workflow
+            model: LLM model to use for generation (defaults to gpt-4)
+            
+        Returns:
+            Dictionary containing the workflow configuration
+        """
+        try:
+            import litellm
+            
+            # Create prompt for the LLM
+            system_prompt = """You are an expert workflow designer for an AI Workflow Builder application.
+Your task is to convert a natural language description into a valid workflow JSON.
+
+The workflow structure should follow this format:
+{
+  "nodes": [
+    {
+      "id": "node1",
+      "type": "llm",
+      "name": "LLM Node Name",
+      "position": {"x": 100, "y": 100},
+      "parameters": {
+        "model": "gpt-4",
+        "system_prompt": "System prompt goes here",
+        "temperature": 0.7
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source_node": "node1",
+      "source_port": "response",
+      "target_node": "node2",
+      "target_port": "input"
+    }
+  ]
+}
+
+Available node types:
+- "llm": Language model nodes (parameters: model, system_prompt, temperature)
+- "decision": Branching logic (parameters: condition)
+- "storage": Store data (parameters: storage_type["static" or "vector"], persist)
+- "python": Custom code (parameters: code)
+- "tool": Tools like web search (parameters: tool_name, tool_parameters)
+- "composite": Sub-workflows (parameters: workflow_json)
+
+Place nodes in a logical flow with reasonable spacing (100-200 px apart).
+Ensure all connections use valid port names:
+- llm node ports: inputs[prompt, system_prompt, temperature], outputs[response, tool_calls, error]
+- decision node ports: inputs[value, condition], outputs[true, false, error]
+- storage node ports: inputs[key, value, operation], outputs[result, success, error]
+- python node ports: inputs[input, code, timeout], outputs[output, error]
+- tool node ports: inputs[input, parameters], outputs[output, error]
+- composite node ports: inputs[input], outputs[output, error]
+
+Generate a complete, valid workflow JSON based on the user's description."""
+
+            user_prompt = f"Create a workflow based on this description: {description}\n\nReturn ONLY the valid JSON without any explanations or markdown formatting."
+            
+            # Call the LLM
+            response = await litellm.acompletion(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.2,
+                max_tokens=4000
+            )
+            
+            # Extract and parse the generated JSON
+            generated_text = response.choices[0].message.content.strip()
+            
+            # Clean the text and remove any markdown formatting
+            if "```json" in generated_text:
+                generated_text = generated_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in generated_text:
+                generated_text = generated_text.split("```")[1].split("```")[0].strip()
+            
+            # Parse the JSON
+            try:
+                workflow_data = json.loads(generated_text)
+                
+                # Validate workflow structure
+                if "nodes" not in workflow_data:
+                    workflow_data["nodes"] = []
+                if "connections" not in workflow_data:
+                    workflow_data["connections"] = []
+                    
+                # Ensure each node has a unique ID
+                node_ids = set()
+                for i, node in enumerate(workflow_data["nodes"]):
+                    if "id" not in node or node["id"] in node_ids:
+                        node["id"] = f"node_{i+1}"
+                    node_ids.add(node["id"])
+                
+                return workflow_data
+                
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Generated workflow is not valid JSON: {e}")
+            
+        except ImportError:
+            raise ImportError("litellm is required for workflow generation")
+        except Exception as e:
+            raise ValueError(f"Error generating workflow: {str(e)}")

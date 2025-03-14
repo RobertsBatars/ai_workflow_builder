@@ -126,30 +126,42 @@ class StateManager:
         """
         checkpoints = []
         
-        # Find JSON files in the checkpoint directory
-        for filename in os.listdir(self.checkpoint_dir):
-            if filename.endswith(".json"):
-                path = os.path.join(self.checkpoint_dir, filename)
-                
-                try:
-                    # Load the checkpoint
-                    with open(path, "r") as f:
-                        checkpoint_dict = json.load(f)
+        try:
+            # Make sure checkpoint directory exists
+            os.makedirs(self.checkpoint_dir, exist_ok=True)
+            
+            # Find JSON files in the checkpoint directory
+            for filename in os.listdir(self.checkpoint_dir):
+                if filename.endswith(".json"):
+                    path = os.path.join(self.checkpoint_dir, filename)
                     
-                    # Get basic info
-                    checkpoint_info = {
-                        "path": path,
-                        "filename": filename,
-                        "timestamp": checkpoint_dict.get("timestamp", 0),
-                        "datetime": datetime.fromtimestamp(
-                            checkpoint_dict.get("timestamp", 0)
-                        ).strftime("%Y-%m-%d %H:%M:%S"),
-                        "workflow_name": checkpoint_dict.get("workflow", {}).get("name", "Untitled")
-                    }
-                    
-                    checkpoints.append(checkpoint_info)
-                except Exception as e:
-                    print(f"Error loading checkpoint {path}: {str(e)}")
+                    try:
+                        # Load the checkpoint
+                        with open(path, "r") as f:
+                            checkpoint_dict = json.load(f)
+                        
+                        # Get basic info
+                        timestamp = checkpoint_dict.get("timestamp", 0)
+                        if isinstance(timestamp, str):
+                            try:
+                                timestamp = float(timestamp)
+                            except ValueError:
+                                timestamp = 0
+                        
+                        checkpoint_info = {
+                            "path": path,
+                            "filename": filename,
+                            "timestamp": timestamp,
+                            "datetime": datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+                            "workflow_name": (checkpoint_dict.get("workflow", {}).get("name", None) or 
+                                             checkpoint_dict.get("workflow", {}).get("metadata", {}).get("name", "Untitled"))
+                        }
+                        
+                        checkpoints.append(checkpoint_info)
+                    except Exception as e:
+                        logger.error(f"Error loading checkpoint {path}: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error accessing checkpoint directory: {str(e)}")
         
         # Sort by timestamp, newest first
         checkpoints.sort(key=lambda x: x["timestamp"], reverse=True)

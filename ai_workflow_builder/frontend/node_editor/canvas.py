@@ -333,9 +333,14 @@ class NodeEditorCanvas(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
         
         # Add the node graph widget to the layout
-        graph_widget = self.graph.widget
-        graph_widget.setMinimumSize(800, 600)
-        self.layout.addWidget(graph_widget)
+        self.graph_widget = self.graph.widget
+        self.graph_widget.setMinimumSize(800, 600)
+        self.layout.addWidget(self.graph_widget)
+        
+        # Enable drag and drop
+        self.setAcceptDrops(True)
+        # Make sure the graph widget also accepts drops
+        self.graph_widget.setAcceptDrops(True)
     
     def clear(self):
         """Clear the canvas."""
@@ -713,3 +718,37 @@ class NodeEditorCanvas(QWidget):
         
         # Emit workflow modified signal
         self.workflow_modified.emit()
+        
+    # Drag and drop event handlers
+    def dragEnterEvent(self, event):
+        """Handle drag enter events."""
+        if event.mimeData().hasFormat("application/x-node"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Handle drag move events."""
+        if event.mimeData().hasFormat("application/x-node"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event):
+        """Handle drop events for nodes."""
+        if event.mimeData().hasFormat("application/x-node"):
+            # Get the node data
+            node_data = json.loads(bytes(event.mimeData().data("application/x-node")).decode())
+            
+            # Get drop position relative to the graph widget
+            pos = self.graph_widget.mapFromParent(event.pos())
+            
+            # Update node position
+            node_data["position"] = {"x": pos.x(), "y": pos.y()}
+            
+            # Add the node
+            self.add_node(node_data)
+            
+            event.acceptProposedAction()
+        else:
+            event.ignore()

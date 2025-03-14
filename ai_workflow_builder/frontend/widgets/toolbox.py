@@ -122,31 +122,69 @@ class ToolboxWidget(QWidget):
         self.apply_styling()
     
     def apply_styling(self):
-        """Apply styling to the widget."""
-        self.node_tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #f8f8f8;
-                border: 1px solid #ddd;
-            }
-            QTreeWidget::item {
-                padding: 2px;
-            }
-            QTreeWidget::item:selected {
-                background-color: #ddf;
-                color: black;
-            }
-        """)
+        """Apply styling to the widget with theme detection."""
+        # Check if system is using dark mode
+        from PySide6.QtGui import QPalette
+        from PySide6.QtCore import Qt
         
-        self.refresh_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ddd;
-                padding: 4px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-        """)
+        # Get application palette
+        palette = self.palette()
+        is_dark_mode = palette.color(QPalette.Window).lightness() < 128
+        
+        if is_dark_mode:
+            # Dark theme
+            self.node_tree.setStyleSheet("""
+                QTreeWidget {
+                    background-color: #2d2d2d;
+                    border: 1px solid #444;
+                    color: #e0e0e0;
+                }
+                QTreeWidget::item {
+                    padding: 2px;
+                }
+                QTreeWidget::item:selected {
+                    background-color: #3a539b;
+                    color: white;
+                }
+            """)
+            
+            self.refresh_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #3a3a3a;
+                    border: 1px solid #555;
+                    padding: 4px;
+                    color: #e0e0e0;
+                }
+                QPushButton:hover {
+                    background-color: #464646;
+                }
+            """)
+        else:
+            # Light theme
+            self.node_tree.setStyleSheet("""
+                QTreeWidget {
+                    background-color: #f8f8f8;
+                    border: 1px solid #ddd;
+                }
+                QTreeWidget::item {
+                    padding: 2px;
+                }
+                QTreeWidget::item:selected {
+                    background-color: #ddf;
+                    color: black;
+                }
+            """)
+            
+            self.refresh_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #f0f0f0;
+                    border: 1px solid #ddd;
+                    padding: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #e0e0e0;
+                }
+            """)
     
     def populate_node_tree(self):
         """Populate the node tree with categories and node types."""
@@ -358,7 +396,52 @@ class ToolboxWidget(QWidget):
     
     def mouseMoveEvent(self, event):
         """Override to handle drag and drop of nodes."""
-        # Let the parent handle the event as normal
-        super().mouseMoveEvent(event)
-    
-    # Custom drag-and-drop methods can be implemented here if needed
+        # Check if a node item is selected
+        selected_item = self.node_tree.currentItem()
+        if selected_item is None or selected_item.parent() is None:
+            # No node item selected, let the parent handle as normal
+            super().mouseMoveEvent(event)
+            return
+            
+        # Get node type data
+        node_type = selected_item.data(0, Qt.UserRole)
+        if not node_type:
+            super().mouseMoveEvent(event)
+            return
+            
+        # Start drag operation
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        
+        # Create node data
+        node_data = self.create_new_node(node_type)
+        
+        # Set MIME data with JSON serialized node data
+        mime_data.setText(json.dumps(node_data))
+        mime_data.setData("application/x-node", json.dumps(node_data).encode())
+        
+        # Set drag pixmap
+        pixmap = QPixmap(100, 30)
+        pixmap.fill(QColor(100, 100, 180))
+        drag.setPixmap(pixmap)
+        
+        # Set MIME data and start drag
+        drag.setMimeData(mime_data)
+        drag.setHotSpot(QPoint(pixmap.width() // 2, pixmap.height() // 2))
+        
+        # Execute drag
+        result = drag.exec_(Qt.CopyAction)
+        
+    def dragEnterEvent(self, event):
+        """Handle drag enter events."""
+        if event.mimeData().hasFormat("application/x-node"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+            
+    def dragMoveEvent(self, event):
+        """Handle drag move events."""
+        if event.mimeData().hasFormat("application/x-node"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()

@@ -1,6 +1,6 @@
 # AI Workflow Builder
 
-A cross-platform Python application for creating AI agent workflows using a node-based interface. Users can drag-and-drop nodes (LLMs, tools, logic, storage), configure them, and export/share workflows as self-contained JSON files.
+A cross-platform Python application for creating AI agent workflows using a node-based interface. Users can drag-and-drop nodes (LLMs, tools, logic, storage), configure them, and execute workflows directly or export them as self-contained JSON files.
 
 ## Features
 
@@ -9,13 +9,27 @@ A cross-platform Python application for creating AI agent workflows using a node
   - **LLM Node**: Run local/remote models (via LiteLLM), attach tools, validate JSON outputs
   - **Decision Node**: Branch workflows using Python expressions
   - **Composite Node**: Encapsulate sub-workflows into reusable nodes
-  - **Storage Node**: Store text/key-value data and vector embeddings
+  - **Storage Node**: Store text/key-value data and vector embeddings (FAISS)
   - **Custom Python Node**: Execute user code in sandboxed environments
   - **Tool Node**: Use prebuilt (web search, file I/O) or user-defined tools
-- **Workflow Management**: Export and import workflows as JSON
-- **Execution Engine**: Async execution with topological sorting
-- **Virtualization**: Optional Docker-based sandboxing
-- **State Management**: Autosave progress and resume from checkpoints
+- **Workflow Management**: 
+  - Export and import workflows as JSON
+  - Start, stop, and monitor workflow execution
+  - AI-Generated Workflows from natural language descriptions
+- **Advanced Execution Engine**: 
+  - Async execution with topological sorting
+  - Undo/redo functionality
+  - Full history tracking
+- **Security Features**:
+  - Docker-based sandboxing with three isolation levels (none, lightweight, ubuntu)
+  - Security warnings for risky operations
+- **State Management**: 
+  - Automatic checkpoints creation
+  - Autosave with configurable intervals
+  - Resume from saved checkpoints after crashes
+- **Customization**:
+  - Light and dark theme support
+  - Configurable performance settings
 
 ## Installation
 

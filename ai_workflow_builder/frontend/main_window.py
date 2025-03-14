@@ -40,6 +40,11 @@ class MainWindow(QMainWindow):
         self.current_workflow_path = None
         self.modified = False
         
+        # History for undo/redo
+        self.history_stack = []
+        self.history_index = -1
+        self.history_max_size = 50  # Maximum history size
+        
         # Set up the UI
         self.setWindowTitle("AI Workflow Builder")
         self.resize(1280, 800)
@@ -145,6 +150,13 @@ class MainWindow(QMainWindow):
         
         self.file_menu.addSeparator()
         
+        # Preferences action
+        self.preferences_action = QAction("&Preferences...", self)
+        self.preferences_action.triggered.connect(self.show_preferences)
+        self.file_menu.addAction(self.preferences_action)
+        
+        self.file_menu.addSeparator()
+        
         # Exit action
         self.exit_action = QAction("E&xit", self)
         self.exit_action.setShortcut(QKeySequence.Quit)
@@ -218,12 +230,20 @@ class MainWindow(QMainWindow):
         self.toggle_log_console_action.triggered.connect(self.toggle_log_console)
         self.view_menu.addAction(self.toggle_log_console_action)
         
+        self.view_menu.addSeparator()
+        
+        # Refresh UI action
+        self.refresh_ui_action = QAction("&Refresh UI", self)
+        self.refresh_ui_action.setShortcut("F5")
+        self.refresh_ui_action.triggered.connect(self.refresh_ui)
+        self.view_menu.addAction(self.refresh_ui_action)
+        
         # Workflow menu
         self.workflow_menu = self.menuBar().addMenu("&Workflow")
         
         # Run workflow action
         self.run_action = QAction("&Run Workflow", self)
-        self.run_action.setShortcut("F5")
+        self.run_action.setShortcut("Ctrl+R")
         self.run_action.triggered.connect(self.run_workflow)
         self.workflow_menu.addAction(self.run_action)
         
@@ -232,6 +252,14 @@ class MainWindow(QMainWindow):
         self.stop_action.setShortcut("Shift+F5")
         self.stop_action.triggered.connect(self.stop_workflow)
         self.workflow_menu.addAction(self.stop_action)
+        
+        self.workflow_menu.addSeparator()
+        
+        # Generate workflow from text action
+        self.generate_workflow_action = QAction("&Generate Workflow from Text...", self)
+        self.generate_workflow_action.setShortcut("Ctrl+G")
+        self.generate_workflow_action.triggered.connect(self.generate_workflow_from_text)
+        self.workflow_menu.addAction(self.generate_workflow_action)
         
         self.workflow_menu.addSeparator()
         
@@ -530,13 +558,66 @@ class MainWindow(QMainWindow):
     
     def undo(self):
         """Undo the last operation."""
-        # TODO: Implement undo functionality
-        self.log_console.log("Undo not implemented yet")
+        if self.history_index <= 0:
+            self.log_console.log("Nothing to undo")
+            return
+            
+        # Move back in history
+        self.history_index -= 1
+        
+        # Get the previous state
+        previous_state = self.history_stack[self.history_index]
+        
+        # Load the previous state
+        self._load_state(previous_state)
+        
+        # Update UI
+        self.log_console.log("Undo: Reverted to previous state")
     
     def redo(self):
         """Redo the last undone operation."""
-        # TODO: Implement redo functionality
-        self.log_console.log("Redo not implemented yet")
+        if self.history_index >= len(self.history_stack) - 1:
+            self.log_console.log("Nothing to redo")
+            return
+            
+        # Move forward in history
+        self.history_index += 1
+        
+        # Get the next state
+        next_state = self.history_stack[self.history_index]
+        
+        # Load the next state
+        self._load_state(next_state)
+        
+        # Update UI
+        self.log_console.log("Redo: Applied next state")
+        
+    def _add_to_history(self, state):
+        """Add a state to the history stack."""
+        # If we're not at the end of the stack, remove everything after the current index
+        if self.history_index < len(self.history_stack) - 1:
+            self.history_stack = self.history_stack[:self.history_index + 1]
+        
+        # Add the new state
+        self.history_stack.append(state)
+        self.history_index = len(self.history_stack) - 1
+        
+        # Trim the history if it exceeds the maximum size
+        if len(self.history_stack) > self.history_max_size:
+            # Remove the oldest state
+            self.history_stack.pop(0)
+            self.history_index -= 1
+            
+    def _load_state(self, state):
+        """Load a state from the history stack."""
+        # Clear the canvas
+        self.canvas.clear()
+        
+        # Load the workflow
+        self.canvas.load_workflow(state)
+        
+        # Update current workflow
+        self.current_workflow = state
     
     def cut(self):
         """Cut selected nodes."""
@@ -597,7 +678,13 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Running workflow...")
             self.log_console.log(f"Workflow execution started (ID: {self.current_workflow_id})")
             
-            # TODO: Implement polling for workflow status updates
+            # Start polling for status updates
+            from PySide6.QtCore import QTimer
+            
+            # Create timer for polling
+            self.status_timer = QTimer(self)
+            self.status_timer.timeout.connect(self._poll_workflow_status)
+            self.status_timer.start(2000)  # Poll every 2 seconds
             
         except Exception as e:
             QMessageBox.critical(
@@ -605,10 +692,66 @@ class MainWindow(QMainWindow):
                 f"An error occurred while running the workflow: {str(e)}"
             )
     
+    def _poll_workflow_status(self):
+        """Poll for workflow status updates."""
+        if not hasattr(self, 'current_workflow_id') or not self.current_workflow_id:
+            # No workflow running, stop polling
+            if hasattr(self, 'status_timer'):
+                self.status_timer.stop()
+            return
+            
+        try:
+            # Get workflow status
+            status = self.api_client.get_workflow_status(self.current_workflow_id)
+            status_value = status.get("status", "unknown")
+            
+            # Update status
+            self.status_label.setText(f"Workflow status: {status_value}")
+            
+            # Check if workflow is complete
+            if status_value in ["completed", "failed", "stopped"]:
+                # Stop polling
+                self.status_timer.stop()
+                
+                # Update UI
+                if status_value == "completed":
+                    self.log_console.log(f"Workflow completed successfully (ID: {self.current_workflow_id})")
+                elif status_value == "failed":
+                    error = status.get("error", "Unknown error")
+                    self.log_console.log(f"Workflow failed (ID: {self.current_workflow_id}): {error}", "ERROR")
+                elif status_value == "stopped":
+                    self.log_console.log(f"Workflow stopped (ID: {self.current_workflow_id})")
+                
+                # Clear current workflow ID
+                self.current_workflow_id = None
+            
+        except Exception as e:
+            self.log_console.log(f"Error polling workflow status: {str(e)}", "ERROR")
+            self.status_timer.stop()
+    
     def stop_workflow(self):
         """Stop the currently running workflow."""
-        # TODO: Implement workflow stopping
-        self.log_console.log("Stop workflow not implemented yet")
+        if not hasattr(self, 'current_workflow_id') or not self.current_workflow_id:
+            self.log_console.log("No workflow currently running")
+            return
+            
+        try:
+            # Stop the workflow
+            result = self.api_client.stop_workflow(self.current_workflow_id)
+            
+            # Update status
+            self.status_label.setText("Stopping workflow...")
+            self.log_console.log(f"Workflow stop requested (ID: {self.current_workflow_id})")
+            
+            # Display result message
+            message = result.get("message", "Unknown result")
+            self.log_console.log(f"Stop result: {message}")
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error Stopping Workflow",
+                f"An error occurred while stopping the workflow: {str(e)}"
+            )
     
     def validate_workflow(self):
         """Validate the current workflow."""
@@ -648,7 +791,238 @@ class MainWindow(QMainWindow):
             node_data = self.canvas.get_node_data(node_id)
             if node_data:
                 self.property_panel.load_node(node_data)
+                
+    def on_workflow_modified(self):
+        """Handle workflow modification."""
+        # Mark workflow as modified
+        self.modified = True
+        self.update_title()
+        
+        # Get current workflow data
+        workflow_data = self.canvas.get_workflow_data()
+        self.current_workflow.update(workflow_data)
+        
+        # Add to history stack
+        self._add_to_history(self.current_workflow.copy())
     
+    def _save_initial_state(self):
+        """Save the initial state to history."""
+        if self.current_workflow:
+            self._add_to_history(self.current_workflow.copy())
+            
+    def on_node_dragged(self, node_data):
+        """Handle node dragged from toolbox."""
+        # Add the node to the canvas
+        self.canvas.add_node(node_data)
+        
+    def on_node_modified(self, node_id, updated_node):
+        """Handle node modification from property panel."""
+        # Update the node in the canvas
+        self.canvas.update_node(node_id, updated_node)
+        
+        # Mark workflow as modified
+        self.modified = True
+        self.update_title()
+    
+    def generate_workflow_from_text(self):
+        """Generate a workflow from a natural language description."""
+        from PySide6.QtWidgets import QInputDialog, QLineEdit, QDialog, QDialogButtonBox, QVBoxLayout, QTextEdit, QLabel, QComboBox
+        
+        # Create a custom dialog for input
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Generate Workflow from Text")
+        dialog.setMinimumWidth(500)
+        
+        # Set up layout
+        layout = QVBoxLayout(dialog)
+        
+        # Description field
+        layout.addWidget(QLabel("Enter a description of the workflow you want to create:"))
+        description_input = QTextEdit()
+        description_input.setPlaceholderText("E.g., 'Create a workflow that takes user questions, searches the web, and generates a response based on the search results.'")
+        description_input.setMinimumHeight(100)
+        layout.addWidget(description_input)
+        
+        # Model selection
+        layout.addWidget(QLabel("Select the AI model to use:"))
+        model_combo = QComboBox()
+        model_combo.addItems(["gpt-4", "gpt-3.5-turbo", "claude-3-opus", "claude-3-sonnet"])
+        layout.addWidget(model_combo)
+        
+        # Add buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show dialog
+        if dialog.exec() != QDialog.Accepted:
+            return
+        
+        description = description_input.toPlainText().strip()
+        model = model_combo.currentText()
+        
+        if not description:
+            QMessageBox.warning(self, "Error", "Please enter a workflow description.")
+            return
+        
+        # Show loading indicator
+        self.status_label.setText("Generating workflow...")
+        self.log_console.log(f"Generating workflow from text using {model}...")
+        
+        try:
+            # Call the API client to generate workflow
+            workflow = self.api_client.generate_workflow_from_text(description, model)
+            
+            if not workflow:
+                raise ValueError("Generated workflow is empty")
+                
+            # Set as current workflow
+            self.current_workflow = workflow
+            self.current_workflow_path = None
+            self.modified = True
+            
+            # Update UI
+            self.canvas.load_workflow(workflow)
+            self.property_panel.clear()
+            self.update_title()
+            
+            self.log_console.log("Workflow generated successfully")
+            self.status_label.setText("Workflow generated successfully")
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error Generating Workflow",
+                f"An error occurred while generating the workflow: {str(e)}"
+            )
+            self.status_label.setText("Error generating workflow")
+            self.log_console.log(f"Error generating workflow: {str(e)}", "ERROR")
+
+    def show_preferences(self):
+        """Show preferences dialog."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTabWidget, QWidget, QFormLayout, QComboBox, QDialogButtonBox, QLabel, QCheckBox, QSpinBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Preferences")
+        dialog.setMinimumWidth(400)
+        
+        # Main layout
+        layout = QVBoxLayout(dialog)
+        
+        # Tab widget
+        tabs = QTabWidget()
+        layout.addWidget(tabs)
+        
+        # Appearance tab
+        appearance_tab = QWidget()
+        appearance_layout = QFormLayout(appearance_tab)
+        
+        # Theme selection
+        theme_label = QLabel("UI Theme:")
+        theme_combo = QComboBox()
+        theme_combo.addItems(["System Default", "Light Theme", "Dark Theme"])
+        
+        # Get current theme from settings
+        current_theme = self.settings.value("theme", "System Default")
+        index = theme_combo.findText(current_theme)
+        if index >= 0:
+            theme_combo.setCurrentIndex(index)
+        
+        appearance_layout.addRow(theme_label, theme_combo)
+        
+        # Add to tabs
+        tabs.addTab(appearance_tab, "Appearance")
+        
+        # Workflow tab
+        workflow_tab = QWidget()
+        workflow_layout = QFormLayout(workflow_tab)
+        
+        # Autosave settings
+        autosave_check = QCheckBox("Enable autosave")
+        autosave_check.setChecked(self.settings.value("autosave_enabled", True, type=bool))
+        workflow_layout.addRow("Autosave:", autosave_check)
+        
+        # Autosave interval
+        autosave_interval = QSpinBox()
+        autosave_interval.setMinimum(1)
+        autosave_interval.setMaximum(60)
+        autosave_interval.setValue(self.settings.value("autosave_interval", 5, type=int))
+        autosave_interval.setSuffix(" minutes")
+        workflow_layout.addRow("Autosave interval:", autosave_interval)
+        
+        # Add to tabs
+        tabs.addTab(workflow_tab, "Workflow")
+        
+        # Performance tab
+        performance_tab = QWidget()
+        performance_layout = QFormLayout(performance_tab)
+        
+        # Undo history size
+        undo_history = QSpinBox()
+        undo_history.setMinimum(10)
+        undo_history.setMaximum(200)
+        undo_history.setValue(self.settings.value("history_max_size", 50, type=int))
+        performance_layout.addRow("Undo history size:", undo_history)
+        
+        # Add to tabs
+        tabs.addTab(performance_tab, "Performance")
+        
+        # Button box
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show dialog
+        if dialog.exec() == QDialog.Accepted:
+            # Save settings
+            self.settings.setValue("theme", theme_combo.currentText())
+            self.settings.setValue("autosave_enabled", autosave_check.isChecked())
+            self.settings.setValue("autosave_interval", autosave_interval.value())
+            self.settings.setValue("history_max_size", undo_history.value())
+            
+            # Apply settings
+            self.history_max_size = undo_history.value()
+            
+            # Apply theme
+            self.apply_theme(theme_combo.currentText())
+            
+            self.log_console.log("Preferences updated")
+    
+    def apply_theme(self, theme_name):
+        """Apply the selected theme."""
+        # Determine if dark mode should be used
+        use_dark_mode = False
+        
+        if theme_name == "Dark Theme":
+            use_dark_mode = True
+        elif theme_name == "System Default":
+            # Check system theme
+            from PySide6.QtGui import QPalette
+            palette = self.palette()
+            use_dark_mode = palette.color(QPalette.Window).lightness() < 128
+        
+        # Apply to all widgets that support theming
+        if hasattr(self.toolbox, 'apply_styling'):
+            self.toolbox.apply_styling()
+        
+        if hasattr(self.property_panel, 'apply_styling'):
+            self.property_panel.apply_styling()
+        
+        if hasattr(self.log_console, 'apply_styling'):
+            self.log_console.apply_styling()
+    
+    def refresh_ui(self):
+        """Refresh the UI."""
+        # Re-apply theme based on current settings
+        theme = self.settings.value("theme", "System Default")
+        self.apply_theme(theme)
+        
+        # Update other UI elements
+        self.canvas.update()
+        self.update()
+        self.log_console.log("UI refreshed")
+        
     def show_about(self):
         """Show the about dialog."""
         QMessageBox.about(

@@ -73,46 +73,109 @@ class PropertyPanel(QWidget):
         self.apply_styling()
     
     def apply_styling(self):
-        """Apply styling to the widget."""
-        self.scroll_area.setStyleSheet("""
-            QScrollArea {
-                background-color: #f8f8f8;
-                border: 1px solid #ddd;
-            }
-        """)
+        """Apply styling to the widget with theme detection."""
+        # Check if system is using dark mode
+        from PySide6.QtGui import QPalette
+        from PySide6.QtCore import Qt
         
-        self.form_container.setStyleSheet("""
-            QLabel {
-                font-weight: normal;
-            }
-            QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                background-color: white;
-                border: 1px solid #ccc;
-                padding: 2px;
-            }
-            QGroupBox {
-                border: 1px solid #ccc;
-                border-radius: 3px;
-                margin-top: 0.5em;
-                padding-top: 0.5em;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        # Get application palette
+        palette = self.palette()
+        is_dark_mode = palette.color(QPalette.Window).lightness() < 128
         
-        self.apply_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #ddd;
-                padding: 4px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-        """)
+        if is_dark_mode:
+            # Dark theme
+            self.scroll_area.setStyleSheet("""
+                QScrollArea {
+                    background-color: #2d2d2d;
+                    border: 1px solid #444;
+                }
+            """)
+            
+            self.form_container.setStyleSheet("""
+                QWidget {
+                    background-color: #2d2d2d;
+                    color: #e0e0e0;
+                }
+                QLabel {
+                    font-weight: normal;
+                    color: #e0e0e0;
+                }
+                QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+                    background-color: #3a3a3a;
+                    color: #e0e0e0;
+                    border: 1px solid #555;
+                    padding: 2px;
+                }
+                QGroupBox {
+                    border: 1px solid #555;
+                    border-radius: 3px;
+                    margin-top: 0.5em;
+                    padding-top: 0.5em;
+                    color: #e0e0e0;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 5px;
+                    color: #e0e0e0;
+                }
+            """)
+            
+            self.apply_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #3a3a3a;
+                    border: 1px solid #555;
+                    padding: 4px;
+                    color: #e0e0e0;
+                }
+                QPushButton:hover {
+                    background-color: #464646;
+                }
+            """)
+        else:
+            # Light theme
+            self.scroll_area.setStyleSheet("""
+                QScrollArea {
+                    background-color: #f8f8f8;
+                    border: 1px solid #ddd;
+                }
+            """)
+            
+            self.form_container.setStyleSheet("""
+                QLabel {
+                    font-weight: normal;
+                }
+                QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+                    background-color: white;
+                    border: 1px solid #ccc;
+                    padding: 2px;
+                }
+                QGroupBox {
+                    border: 1px solid #ccc;
+                    border-radius: 3px;
+                    margin-top: 0.5em;
+                    padding-top: 0.5em;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 5px;
+                }
+            """)
+            
+            self.apply_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #f0f0f0;
+                    border: 1px solid #ddd;
+                    padding: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #e0e0e0;
+                }
+            """)
+        
+        # Apply a specific style to the title label regardless of theme
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 12px;")
     
     def clear(self):
         """Clear the property panel."""
