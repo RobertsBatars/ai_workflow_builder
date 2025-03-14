@@ -407,8 +407,19 @@ class ToolboxWidget(QWidget):
             super().mouseMoveEvent(event)
             return
             
+        # Skip if we don't have a valid start position
+        if self._drag_start_pos.isNull():
+            super().mouseMoveEvent(event)
+            return
+            
         # Check if mouse has moved far enough to start a drag
-        if (event.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+        try:
+            if (event.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+                super().mouseMoveEvent(event)
+                return
+        except Exception as e:
+            if hasattr(self.main_window, "log_console"):
+                self.main_window.log_console.log(f"Error checking drag distance: {str(e)}", "ERROR")
             super().mouseMoveEvent(event)
             return
             

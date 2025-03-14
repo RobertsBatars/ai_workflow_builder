@@ -746,15 +746,17 @@ class NodeEditorCanvas(QWidget):
     
     def eventFilter(self, obj, event):
         """Filter events to handle drops on graph widget."""
-        if (obj == self.graph_widget and event.type() == event.DragEnter):
+        from PySide6.QtCore import QEvent
+        
+        if (obj == self.graph_widget and event.type() == QEvent.DragEnter):
             # Forward the drag enter event
             self.dragEnterEvent(event)
             return True
-        elif (obj == self.graph_widget and event.type() == event.DragMove):
+        elif (obj == self.graph_widget and event.type() == QEvent.DragMove):
             # Forward the drag move event
             self.dragMoveEvent(event)
             return True
-        elif (obj == self.graph_widget and event.type() == event.Drop):
+        elif (obj == self.graph_widget and event.type() == QEvent.Drop):
             # Forward the drop event
             self.dropEvent(event)
             return True
