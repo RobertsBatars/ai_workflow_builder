@@ -11,110 +11,10 @@ from PySide6.QtCore import Qt, Signal, Slot, QPointF
 from PySide6.QtGui import QColor
 
 # NodeGraphQt imports
-try:
-    from NodeGraphQt import (
-        NodeGraph, NodeBaseWidget, BackdropNode, 
-        Port, NodeFactory, PropertiesBinWidget
-    )
-except ImportError:
-    # Mock classes for documentation/development without NodeGraphQt
-    class NodeGraph:
-        def __init__(self, parent=None): 
-            # Create mock signals as callables with connect method
-            self.widget = QWidget()
-            
-            # Custom signal implementation for mock objects
-            class MockSignal:
-                def __init__(self, *args):
-                    self.callbacks = []
-                
-                def connect(self, callback):
-                    self.callbacks.append(callback)
-                
-                def emit(self, *args):
-                    for callback in self.callbacks:
-                        callback(*args)
-            
-            # Create mock signals
-            self.node_selected = MockSignal(object)
-            self.node_created = MockSignal(object)
-            self.node_deleted = MockSignal(object)
-            self.property_changed = MockSignal(object, str, object)
-            self.port_connected = MockSignal(object, object)
-            self.port_disconnected = MockSignal(object, object)
-            
-        def register_node(self, cls): pass
-        def set_context_menu_from_file(self, path): pass
-        def add_node(self, node_type, name=None, pos=None): return None
-        def clear_selection(self): pass
-        def fit_to_selection(self): pass
-        def delete_node(self, node): pass
-        def update_node_property(self, node_id, prop_name, prop_value): pass
-        def register_nodes(self, nodes): pass
-        def set_pipe_layout(self, layout): pass
-        def viewer(self): return None
-        def model(self): return None
-        def clear_all(self): pass
-        def create_node(self, node_type, name=None, pos=None): return NodeBaseWidget(name)
-        def all_pipes(self): return []
-        
-    class NodeBaseWidget:
-        def __init__(self, name=None, parent=None): 
-            self.name = name
-            self.id = str(uuid.uuid4())
-            self.type_ = name
-            self.properties = {}
-            self.inputs = {}
-            self.outputs = {}
-            
-        def set_property(self, prop_name, prop_value):
-            self.properties[prop_name] = prop_value
-            
-        def get_property(self, prop_name):
-            return self.properties.get(prop_name)
-            
-        def has_property(self, prop_name):
-            return prop_name in self.properties
-            
-        def add_input(self, name, **kwargs):
-            self.inputs[name] = Port(self, name)
-            
-        def add_output(self, name, **kwargs):
-            self.outputs[name] = Port(self, name)
-            
-        def input_ports(self):
-            return list(self.inputs.values())
-            
-        def output_ports(self):
-            return list(self.outputs.values())
-            
-        def create_property(self, name, value, **kwargs):
-            self.properties[name] = value
-            
-        def set_color(self, r, g, b):
-            pass
-            
-        def pos(self):
-            return [0, 0]
-    
-    class BackdropNode:
-        def __init__(self, name=None): pass
-    
-    class Port:
-        def __init__(self, node=None, name=None): 
-            self.node = node
-            self._name = name
-            
-        def name(self):
-            return self._name
-            
-        def connect_to(self, port):
-            pass
-    
-    class NodeFactory:
-        def __init__(self): pass
-        def create_node_instance(self, node_type): pass
-        def register_node(self, cls, identifier=None): pass
+from NodeGraphQt import (
+    NodeGraph, NodeBaseWidget, BackdropNode, 
+    Port, NodeFactory, PropertiesBinWidget
+)
 
 
 # Define node classes for the different node types
@@ -477,6 +377,14 @@ class NodeEditorCanvas(QWidget):
         
         # Store in node map
         self.node_map[node_id] = graph_node
+        
+        # Log node creation
+        if hasattr(self.main_window, "log_console"):
+            self.main_window.log_console.log(
+                f"Created {node_type} node: {node_name} at ({position.get('x', 0)}, {position.get('y', 0)})"
+            )
+        
+        return graph_node
     
     def _create_connection_from_config(self, config: Dict[str, Any]):
         """
