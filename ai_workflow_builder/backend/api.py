@@ -4,101 +4,15 @@ API endpoints for communication between the frontend and backend.
 import os
 import json
 import time
-import secrets
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Header, Request, status
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-# Try to import security modules, which may require python-multipart
-try:
-    from fastapi.security import APIKeyHeader, OAuth2PasswordBearer, OAuth2PasswordRequestForm
-    security_imports_available = True
-except ImportError:
-    # Create mock security classes when modules aren't available
-    print("Warning: Security imports not available, using mock security classes")
-    class APIKeyHeader:
-        def __init__(self, name, auto_error=True):
-            self.name = name
-            self.auto_error = auto_error
-            
-        async def __call__(self, request: Request):
-            return None
-    
-    class OAuth2PasswordBearer:
-        def __init__(self, tokenUrl):
-            self.tokenUrl = tokenUrl
-            
-        async def __call__(self, request: Request):
-            return None
-    
-    class OAuth2PasswordRequestForm:
-        def __init__(self, username="", password=""):
-            self.username = username
-            self.password = password
-    
-    security_imports_available = False
 from pydantic import BaseModel, Field
 
-# Check for required authentication and form packages
-try:
-    from jose import JWTError, jwt
-    from passlib.context import CryptContext
-    auth_modules_available = True
-except ImportError:
-    # Create mock objects for development without authentication
-    print("Warning: Authentication modules not available, running with limited security")
-    
-    class JWTError(Exception):
-        pass
-    
-    class jwt:
-        @staticmethod
-        def encode(claims, key, algorithm=None):
-            import base64
-            import json
-            return base64.b64encode(json.dumps(claims).encode()).decode()
-        
-        @staticmethod
-        def decode(token, key, algorithms=None):
-            import base64
-            import json
-            try:
-                return json.loads(base64.b64decode(token).decode())
-            except:
-                raise JWTError("Invalid token")
-    
-    class CryptContext:
-        def __init__(self, schemes=None, deprecated=None):
-            self.schemes = schemes
-            
-        def hash(self, password):
-            import hashlib
-            return hashlib.sha256(password.encode()).hexdigest()
-            
-        def verify(self, password, hashed_password):
-            import hashlib
-            return hashlib.sha256(password.encode()).hexdigest() == hashed_password
-    
-    auth_modules_available = False
-
-# Check for python-multipart (needed for form data)
-try:
-    import multipart
-    form_data_available = True
-except ImportError:
-    try:
-        from starlette.datastructures import FormData
-        form_data_available = True
-    except ImportError:
-        print("Warning: python-multipart not available, form-based authentication disabled")
-        form_data_available = False
-
-# Set overall auth availability based on all requirements
-auth_available = auth_modules_available and form_data_available and security_imports_available
-
+# Simple application running locally - no complex auth needed
 from .workflows import WorkflowRunner
 from .state_manager import StateManager
 from .nodes import NodeRegistry
@@ -106,25 +20,13 @@ from .nodes.tool_node import ToolRegistry
 from ..shared.models import WorkflowConfig
 from ..shared import logger
 
-# Security settings
-SECRET_KEY = os.environ.get("AI_WORKFLOW_BUILDER_SECRET_KEY", secrets.token_hex(32))
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
-API_KEY_NAME = "X-API-Key"
-
-# Create security-related objects if imports are available
-if auth_modules_available:
-    # Create password context for hashing
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-else:
-    # Fallback password context
-    pwd_context = CryptContext(schemes=["plaintext"], deprecated="auto")
-
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# API key header
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+# Simple development user - since app runs locally
+DEV_USER = {
+    "username": "dev_user",
+    "email": "dev@example.com",
+    "full_name": "Development User",
+    "disabled": False
+}
 
 # Create FastAPI app
 app = FastAPI(
@@ -136,7 +38,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
+    allow_origins=["*"],  # For local development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -147,62 +49,6 @@ state_manager = StateManager()
 
 # In-memory cache for active workflows
 active_workflows = {}
-
-# In-memory rate limiting
-rate_limits = {}
-
-# Sample user database - in production, use a real database
-fake_users_db = {
-    "admin": {
-        "username": "admin",
-        "full_name": "Administrator",
-        "email": "admin@example.com",
-        "hashed_password": pwd_context.hash("adminpassword"),
-        "disabled": False,
-    }
-}
-
-# Sample API keys - in production, use a real database
-api_keys = {
-    "12345": {"client": "admin"}
-}
-
-
-# Rate limiting middleware
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    """
-    Rate limiting middleware to prevent abuse.
-    Limits to 100 requests per minute per client.
-    """
-    # Get client IP
-    client_ip = request.client.host
-    
-    # Skip rate limiting for local requests
-    if client_ip in ("127.0.0.1", "localhost", "::1"):
-        return await call_next(request)
-    
-    # Initialize rate limit entry
-    now = time.time()
-    if client_ip not in rate_limits:
-        rate_limits[client_ip] = {"count": 0, "reset_at": now + 60}
-    
-    # Reset count if needed
-    if now > rate_limits[client_ip]["reset_at"]:
-        rate_limits[client_ip] = {"count": 0, "reset_at": now + 60}
-    
-    # Check rate limit
-    rate_limits[client_ip]["count"] += 1
-    if rate_limits[client_ip]["count"] > 100:  # 100 requests per minute
-        logger.warning(f"Rate limit exceeded for {client_ip}")
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={"detail": "Rate limit exceeded. Please try again later."}
-        )
-    
-    # Continue with the request
-    return await call_next(request)
-
 
 # Logging middleware
 @app.middleware("http")
@@ -222,21 +68,13 @@ async def logging_middleware(request: Request, call_next):
     
     return response
 
-
-# Authentication models
-class Token(BaseModel):
-    """Token model for authentication."""
-    access_token: str
-    token_type: str
-    expires_at: datetime
+# Simple authentication dependency for local development
+async def get_current_user():
+    """Get the current user - always returns the dev user for local development."""
+    return DEV_USER
 
 
-class TokenPayload(BaseModel):
-    """JWT token payload."""
-    sub: Optional[str] = None
-    exp: Optional[datetime] = None
-
-
+# API models
 class User(BaseModel):
     """User model."""
     username: str
@@ -245,12 +83,6 @@ class User(BaseModel):
     disabled: Optional[bool] = None
 
 
-class UserInDB(User):
-    """User model with hashed password."""
-    hashed_password: str
-
-
-# Input/output models
 class WorkflowRequest(BaseModel):
     """Request model for workflow operations."""
     workflow: Dict[str, Any] = Field(...)
@@ -294,215 +126,11 @@ class ToolsResponse(BaseModel):
     tools: List[str]
 
 
-# Authentication functions
-def verify_password(plain_password, hashed_password):
-    """Verify password against hash."""
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password):
-    """Generate password hash."""
-    return pwd_context.hash(password)
-
-
-def get_user(db, username: str):
-    """Get user from database."""
-    if username in db:
-        user_dict = db[username]
-        return UserInDB(**user_dict)
-    return None
-
-
-def authenticate_user(fake_db, username: str, password: str):
-    """Authenticate user."""
-    user = get_user(fake_db, username)
-    if not user:
-        return False
-    if not verify_password(password, user.hashed_password):
-        return False
-    return user
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create JWT access token."""
-    to_encode = data.copy()
-    
-    if expires_delta:
-        expires = datetime.utcnow() + expires_delta
-    else:
-        expires = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expires})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    
-    return encoded_jwt, expires
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Get current user from JWT token."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-        
-        token_data = TokenPayload(sub=username, exp=payload.get("exp"))
-    except JWTError:
-        raise credentials_exception
-    
-    user = get_user(fake_users_db, username=token_data.sub)
-    if user is None:
-        raise credentials_exception
-    
-    return user
-
-
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    """Check if user is active."""
-    if current_user.disabled:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
-
-async def verify_api_key(api_key: str = Depends(api_key_header)):
-    """Verify API key."""
-    if api_key is None:
-        return None
-    
-    if api_key not in api_keys:
-        return None
-    
-    return api_keys[api_key]
-
-
-if auth_available:
-    async def get_auth_from_api_key_or_token(
-        api_key_info: Optional[Dict] = Depends(verify_api_key),
-        current_user: Optional[User] = Depends(get_current_user),
-    ):
-        """Get authentication from either API key or JWT token."""
-        if current_user:
-            return current_user
-        
-        if api_key_info:
-            username = api_key_info.get("client")
-            if username:
-                user = get_user(fake_users_db, username)
-                if user:
-                    return user
-        
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-else:
-    # Mock authentication dependency when auth modules are not available
-    async def get_auth_from_api_key_or_token():
-        """Mock authentication dependency when auth is not available."""
-        # Return a mock user for development
-        return type('User', (), {
-            'username': 'dev_user',
-            'email': 'dev@example.com',
-            'full_name': 'Development User', 
-            'disabled': False
-        })()
-
-
-# Define token request model to use when form data is not available
-class TokenRequest(BaseModel):
-    username: str
-    password: str
-
-# Authentication endpoints
-if auth_available:
-    # Use form-based authentication
-    @app.post("/token", response_model=Token)
-    async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-        """Login to get access token."""
-        user = authenticate_user(fake_users_db, form_data.username, form_data.password)
-        
-        if not user:
-            logger.warning(f"Failed login attempt for user: {form_data.username}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        # Create access token
-        access_token_data = {"sub": user.username}
-        access_token, expires = create_access_token(access_token_data)
-        
-        logger.info(f"User {user.username} logged in successfully")
-        return Token(
-            access_token=access_token,
-            token_type="bearer",
-            expires_at=expires
-        )
-
-
-    @app.get("/users/me", response_model=User)
-    async def read_users_me(current_user: User = Depends(get_current_active_user)):
-        """Get current user information."""
-        return current_user
-
-elif auth_modules_available and not form_data_available:
-    # Use JSON-based authentication when only python-multipart is missing
-    @app.post("/token", response_model=Token)
-    async def login_for_access_token(data: TokenRequest):
-        """Login to get access token using JSON instead of form data."""
-        user = authenticate_user(fake_users_db, data.username, data.password)
-        
-        if not user:
-            logger.warning(f"Failed login attempt for user: {data.username}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        # Create access token
-        access_token_data = {"sub": user.username}
-        access_token, expires = create_access_token(access_token_data)
-        
-        logger.info(f"User {user.username} logged in successfully")
-        return Token(
-            access_token=access_token,
-            token_type="bearer",
-            expires_at=expires
-        )
-
-    @app.get("/users/me", response_model=User)
-    async def read_users_me(current_user: User = Depends(get_current_active_user)):
-        """Get current user information."""
-        return current_user
-else:
-    # Dummy authentication endpoints when auth modules are not available
-    @app.post("/token")
-    async def login_for_access_token():
-        """Mock login endpoint when auth is not available."""
-        return {
-            "access_token": "mock_token_since_auth_modules_not_available",
-            "token_type": "bearer",
-            "expires_at": datetime.utcnow() + timedelta(days=1)
-        }
-
-    @app.get("/users/me")
-    async def read_users_me():
-        """Mock user endpoint when auth is not available."""
-        return {
-            "username": "dev_user",
-            "email": "dev@example.com",
-            "full_name": "Development User",
-            "disabled": False
-        }
+# Simple API endpoints for local development
+@app.get("/users/me", response_model=User)
+async def read_users_me():
+    """Get current user information."""
+    return DEV_USER
 
 
 # Health and info endpoints
@@ -526,10 +154,7 @@ async def health_check():
 
 
 @app.post("/workflow/validate", response_model=Dict[str, Any])
-async def validate_workflow(
-    request: WorkflowRequest,
-    current_user: User = Depends(get_auth_from_api_key_or_token)
-):
+async def validate_workflow(request: WorkflowRequest):
     """
     Validate a workflow configuration.
     
@@ -537,7 +162,7 @@ async def validate_workflow(
     """
     try:
         # Log validation attempt
-        logger.info(f"Workflow validation request from user: {current_user.username}")
+        logger.info(f"Workflow validation request")
         
         # Parse the workflow configuration
         config = WorkflowConfig.parse_obj(request.workflow)
@@ -563,7 +188,7 @@ async def validate_workflow(
         except ValueError as e:
             return {"valid": False, "errors": str(e)}
         
-        logger.info(f"Workflow validated successfully by user: {current_user.username}")
+        logger.info("Workflow validated successfully")
         return {"valid": True}
     except Exception as e:
         logger.error(f"Workflow validation error: {str(e)}")
@@ -573,8 +198,7 @@ async def validate_workflow(
 @app.post("/workflow/execute", response_model=WorkflowResponse)
 async def execute_workflow(
     request: WorkflowRequest, 
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_auth_from_api_key_or_token)
+    background_tasks: BackgroundTasks
 ):
     """
     Execute a workflow.
@@ -584,7 +208,7 @@ async def execute_workflow(
     """
     try:
         # Validate the workflow first
-        validation = await validate_workflow(request, current_user)
+        validation = await validate_workflow(request)
         if not validation.get("valid", False):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
@@ -600,11 +224,10 @@ async def execute_workflow(
             "config": request.workflow,
             "status": "running",
             "results": None,
-            "user": current_user.username,
             "started_at": datetime.utcnow(),
         }
         
-        logger.info(f"Starting workflow execution {workflow_id} for user: {current_user.username}")
+        logger.info(f"Starting workflow execution {workflow_id}")
         
         # Run the workflow in the background
         background_tasks.add_task(
@@ -675,10 +298,7 @@ async def _run_workflow(workflow_id: str, workflow: Dict[str, Any], input_data: 
 
 
 @app.get("/workflow/{workflow_id}", response_model=WorkflowResponse)
-async def get_workflow_status(
-    workflow_id: str,
-    current_user: User = Depends(get_auth_from_api_key_or_token)
-):
+async def get_workflow_status(workflow_id: str):
     """
     Get the status of a workflow.
     
@@ -686,21 +306,13 @@ async def get_workflow_status(
     for a specific workflow execution.
     """
     if workflow_id not in active_workflows:
-        logger.warning(f"Workflow {workflow_id} not found, requested by user: {current_user.username}")
+        logger.warning(f"Workflow {workflow_id} not found")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail=f"Workflow {workflow_id} not found"
         )
     
     workflow_info = active_workflows[workflow_id]
-    
-    # Check if user has access to this workflow
-    if workflow_info.get("user") and workflow_info["user"] != current_user.username:
-        logger.warning(f"User {current_user.username} attempted to access workflow {workflow_id} belonging to {workflow_info['user']}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to access this workflow"
-        )
     
     return WorkflowResponse(
         workflow_id=workflow_id,
@@ -710,10 +322,7 @@ async def get_workflow_status(
 
 
 @app.post("/workflow/save", response_model=CheckpointResponse)
-async def save_workflow(
-    request: WorkflowRequest,
-    current_user: User = Depends(get_auth_from_api_key_or_token)
-):
+async def save_workflow(request: WorkflowRequest):
     """
     Save a workflow to a checkpoint.
     
@@ -722,7 +331,7 @@ async def save_workflow(
     """
     try:
         # Validate workflow before saving
-        validation = await validate_workflow(request, current_user)
+        validation = await validate_workflow(request)
         if not validation.get("valid", False):
             return CheckpointResponse(
                 path="",
@@ -730,22 +339,20 @@ async def save_workflow(
                 message=f"Cannot save invalid workflow: {validation.get('errors', 'Unknown error')}"
             )
         
-        # Add user metadata to the workflow
+        # Add basic metadata to the workflow
         workflow_with_metadata = request.workflow.copy()
         if "metadata" not in workflow_with_metadata:
             workflow_with_metadata["metadata"] = {}
         
         workflow_with_metadata["metadata"].update({
-            "created_by": current_user.username,
             "created_at": datetime.utcnow().isoformat(),
-            "last_modified_by": current_user.username,
             "last_modified_at": datetime.utcnow().isoformat(),
         })
         
         # Save the workflow
         path = state_manager.save(workflow_with_metadata)
         
-        logger.info(f"Workflow saved to {path} by user: {current_user.username}")
+        logger.info(f"Workflow saved to {path}")
         
         return CheckpointResponse(
             path=path,
@@ -763,9 +370,7 @@ async def save_workflow(
 
 
 @app.get("/workflow/checkpoints", response_model=CheckpointListResponse)
-async def list_checkpoints(
-    current_user: User = Depends(get_auth_from_api_key_or_token)
-):
+async def list_checkpoints():
     """
     List available checkpoints.
     
@@ -775,22 +380,9 @@ async def list_checkpoints(
         # Get checkpoints
         checkpoints = state_manager.get_checkpoints()
         
-        # Filter checkpoints by user (if metadata is available)
-        user_checkpoints = []
-        for checkpoint in checkpoints:
-            # Always include checkpoints without metadata
-            if "metadata" not in checkpoint:
-                user_checkpoints.append(checkpoint)
-                continue
-                
-            # Include checkpoints created by the current user
-            if checkpoint.get("metadata", {}).get("created_by") == current_user.username:
-                user_checkpoints.append(checkpoint)
-                continue
+        logger.info(f"Retrieved {len(checkpoints)} checkpoints")
         
-        logger.info(f"Retrieved {len(user_checkpoints)} checkpoints for user: {current_user.username}")
-        
-        return CheckpointListResponse(checkpoints=user_checkpoints)
+        return CheckpointListResponse(checkpoints=checkpoints)
         
     except Exception as e:
         logger.error(f"Error listing checkpoints: {str(e)}")
@@ -801,10 +393,7 @@ async def list_checkpoints(
 
 
 @app.get("/workflow/load/{checkpoint_path:path}", response_model=Dict[str, Any])
-async def load_checkpoint(
-    checkpoint_path: str,
-    current_user: User = Depends(get_auth_from_api_key_or_token)
-):
+async def load_checkpoint(checkpoint_path: str):
     """
     Load a workflow from a checkpoint.
     
@@ -814,16 +403,7 @@ async def load_checkpoint(
         # Load the workflow
         workflow = state_manager.load(checkpoint_path)
         
-        # Check user permissions (if metadata is available)
-        if "metadata" in workflow:
-            if workflow["metadata"].get("created_by") != current_user.username:
-                logger.warning(f"User {current_user.username} attempted to load checkpoint {checkpoint_path} owned by {workflow['metadata'].get('created_by')}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You do not have permission to access this checkpoint"
-                )
-        
-        logger.info(f"Checkpoint {checkpoint_path} loaded by user: {current_user.username}")
+        logger.info(f"Checkpoint {checkpoint_path} loaded")
         
         return workflow
         
@@ -836,9 +416,7 @@ async def load_checkpoint(
 
 
 @app.get("/node_types", response_model=NodeTypesResponse)
-async def get_node_types(
-    current_user: User = Depends(get_auth_from_api_key_or_token)
-):
+async def get_node_types():
     """
     Get available node types.
     
@@ -849,7 +427,7 @@ async def get_node_types(
         # Get node types from the registry
         node_types = NodeRegistry.get_node_types()
         
-        logger.info(f"Retrieved {len(node_types)} node types for user: {current_user.username}")
+        logger.info(f"Retrieved {len(node_types)} node types")
         
         return NodeTypesResponse(node_types=node_types)
         
@@ -862,9 +440,7 @@ async def get_node_types(
 
 
 @app.get("/tools", response_model=ToolsResponse)
-async def get_tools(
-    current_user: User = Depends(get_auth_from_api_key_or_token)
-):
+async def get_tools():
     """
     Get available tools.
     
@@ -875,7 +451,7 @@ async def get_tools(
         # Get tools from the registry
         tools = ToolRegistry.get_tool_names()
         
-        logger.info(f"Retrieved {len(tools)} tools for user: {current_user.username}")
+        logger.info(f"Retrieved {len(tools)} tools")
         
         return ToolsResponse(tools=tools)
         

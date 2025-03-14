@@ -20,15 +20,28 @@ except ImportError:
     # Mock classes for documentation/development without NodeGraphQt
     class NodeGraph:
         def __init__(self, parent=None): 
-            # Create mock signals
-            from PySide6.QtCore import Signal
-            self.node_selected = Signal(object)
-            self.node_created = Signal(object)
-            self.node_deleted = Signal(object)
-            self.property_changed = Signal(object, str, object)
-            self.port_connected = Signal(object, object)
-            self.port_disconnected = Signal(object, object)
+            # Create mock signals as callables with connect method
             self.widget = QWidget()
+            
+            # Custom signal implementation for mock objects
+            class MockSignal:
+                def __init__(self, *args):
+                    self.callbacks = []
+                
+                def connect(self, callback):
+                    self.callbacks.append(callback)
+                
+                def emit(self, *args):
+                    for callback in self.callbacks:
+                        callback(*args)
+            
+            # Create mock signals
+            self.node_selected = MockSignal(object)
+            self.node_created = MockSignal(object)
+            self.node_deleted = MockSignal(object)
+            self.property_changed = MockSignal(object, str, object)
+            self.port_connected = MockSignal(object, object)
+            self.port_disconnected = MockSignal(object, object)
             
         def register_node(self, cls): pass
         def set_context_menu_from_file(self, path): pass
