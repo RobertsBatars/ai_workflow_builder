@@ -30,7 +30,7 @@ except ImportError:
         def register_nodes(self, nodes): pass
         def set_pipe_layout(self, layout): pass
         def viewer(self): return None
-        def model: return None
+        def model(self): return None
         
     class NodeBaseWidget:
         def __init__(self, name=None, parent=None): pass
