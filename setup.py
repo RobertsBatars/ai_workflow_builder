@@ -30,11 +30,18 @@ setup(
         "fastapi",
         "pydantic",
         "watchdog",
-        "nodegraphqt",
+        "Qt.py",
+        "NodeGraphQt",
         "uvicorn",
         "numpy",
         "aiohttp",
-        "requests"
+        "requests",
+        "tiktoken",
+        "python-jose",
+        "passlib",
+        "python-multipart",
+        "bcrypt",
+        "cryptography"
     ],
     entry_points={
         "console_scripts": [

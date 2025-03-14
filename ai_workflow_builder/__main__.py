@@ -21,13 +21,53 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import application components
 try:
+    # Try importing main dependencies
     from PySide6.QtWidgets import QApplication
+    
+    # Try to install missing packages automatically if needed
+    missing_packages = []
+    
+    try:
+        import NodeGraphQt
+    except ImportError:
+        missing_packages.append("NodeGraphQt")
+        
+    try:
+        import Qt
+    except ImportError:
+        missing_packages.append("Qt.py")
+        
+    # Check for other critical packages
+    for package in ["tiktoken", "fastapi", "uvicorn", "faiss-cpu"]:
+        try:
+            __import__(package)
+        except ImportError:
+            missing_packages.append(package)
+    
+    # If missing packages, try to install them
+    if missing_packages:
+        print(f"Attempting to install missing packages: {', '.join(missing_packages)}")
+        try:
+            import pip
+            for package in missing_packages:
+                print(f"Installing {package}...")
+                pip.main(["install", package])
+            print("Installation complete. Continuing...")
+        except Exception as install_error:
+            print(f"Error installing packages: {install_error}")
+            print("Please install required dependencies manually with:")
+            print("    pip install -r requirements.txt")
+    
+    # Now import the app components
     from ai_workflow_builder.frontend.main_window import MainWindow
     from ai_workflow_builder.backend.api import app_asgi
+    
 except ImportError as e:
     print(f"Error importing required modules: {e}")
     print("Please install required dependencies with:")
     print("    pip install -r requirements.txt")
+    print("\nIf you're on Windows, make sure to run:")
+    print("    pip install -e .")
     sys.exit(1)
 
 

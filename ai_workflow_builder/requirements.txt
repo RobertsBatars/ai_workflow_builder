@@ -5,7 +5,8 @@ docker
 fastapi
 pydantic
 watchdog
-nodegraphqt
+Qt.py
+NodeGraphQt
 uvicorn
 numpy
 aiohttp

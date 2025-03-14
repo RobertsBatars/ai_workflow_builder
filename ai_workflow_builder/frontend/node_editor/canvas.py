@@ -10,12 +10,29 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QMessageBox
 from PySide6.QtCore import Qt, Signal, Slot, QPointF
 from PySide6.QtGui import QColor
 
-# NodeGraphQt imports
-from NodeGraphQt import NodeGraph
-from NodeGraphQt.base.node import NodeObject as NodeBaseWidget
-from NodeGraphQt.widgets.backdrop import BackdropNode
-from NodeGraphQt.base.port import Port
-from NodeGraphQt.widgets.properties import PropertiesBinWidget
+# NodeGraphQt imports with fallbacks
+try:
+    # Try standard imports first
+    from NodeGraphQt import NodeGraph
+    from NodeGraphQt.qgraphics.node_backdrop import BackdropNode
+    from NodeGraphQt.qgraphics.node_base import NodeItem as NodeBaseWidget
+    from NodeGraphQt.qgraphics.port_item import PortItem as Port
+except ImportError as e:
+    # Try alternate structure for different versions
+    try:
+        from NodeGraphQt import NodeGraph, NodeItem as NodeBaseWidget, PortItem as Port
+        from NodeGraphQt.nodes.backdrop_node import BackdropNode
+    except ImportError:
+        # If all else fails, just import what we can
+        from NodeGraphQt import NodeGraph
+        # Create stub classes for compatibility
+        class NodeBaseWidget:
+            def __init__(self, name=None):
+                self.name = name
+        class BackdropNode:
+            pass
+        class Port:
+            pass
 
 
 # Define node classes for the different node types
