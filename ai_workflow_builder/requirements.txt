@@ -10,3 +10,7 @@ uvicorn
 numpy
 aiohttp
 requests
+tiktoken
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
