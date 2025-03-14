@@ -8,8 +8,15 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
 import litellm
-import tiktoken
 from pydantic import ValidationError
+
+# Try to import tiktoken, but provide a fallback if not available
+try:
+    import tiktoken
+    tiktoken_available = True
+except ImportError:
+    print("Warning: tiktoken not available, using character-based token counting")
+    tiktoken_available = False
 
 from .base import BaseNode, NodeRegistry
 from ...shared.models import LLMNodeConfig
@@ -348,13 +355,19 @@ class LLMNode(BaseNode):
         return 0.0
     
     def _count_tokens(self, messages: List[Dict[str, Any]]) -> int:
-        """Count tokens in the messages using tiktoken."""
+        """Count tokens in the messages using tiktoken if available, otherwise approximate."""
         # Get a key that represents these messages for caching
         message_key = str(hash(str(messages)))
         
         # Check cache first
         if message_key in _token_count_cache:
             return _token_count_cache[message_key]
+        
+        # If tiktoken is not available, use character-based approximation
+        if not tiktoken_available:
+            token_count = self._approximate_token_count(messages)
+            _token_count_cache[message_key] = token_count
+            return token_count
         
         # Get the tokenizer based on the model
         tokenizer_name = self._get_tokenizer_for_model()
