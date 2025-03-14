@@ -77,6 +77,7 @@ class MainWindow(QMainWindow):
         
         # Left panel (toolbox)
         self.toolbox = ToolboxWidget(self)
+        self.toolbox.node_dragged.connect(self.on_node_dragged)
         self.toolbox_dock = QDockWidget("Toolbox", self)
         self.toolbox_dock.setWidget(self.toolbox)
         self.toolbox_dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
@@ -85,6 +86,7 @@ class MainWindow(QMainWindow):
         # Central area (node editor canvas)
         self.canvas = NodeEditorCanvas(self)
         self.canvas.node_selected.connect(self.on_node_selected)
+        self.canvas.workflow_modified.connect(self.on_workflow_modified)
         self.main_splitter.addWidget(self.canvas)
         
         # Right panel (property panel)

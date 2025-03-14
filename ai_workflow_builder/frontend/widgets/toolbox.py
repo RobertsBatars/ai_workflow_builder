@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QLabel, QScrollArea, QPushButton, QMenu
+    QLabel, QScrollArea, QPushButton, QMenu, QApplication
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QDrag, QPixmap, QColor
@@ -26,6 +26,9 @@ class ToolboxWidget(QWidget):
         
         # Parent window reference
         self.main_window = parent
+        
+        # For drag and drop tracking
+        self._drag_start_pos = QPoint()
         
         # Node categories and types
         self.categories = {
@@ -110,6 +113,9 @@ class ToolboxWidget(QWidget):
         # Connect context menu event
         self.node_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.node_tree.customContextMenuRequested.connect(self.show_context_menu)
+        
+        # Connect mouse press event for tracking drag start
+        self.node_tree.mousePressEvent = self._tree_mousePressEvent
         
         self.layout.addWidget(self.node_tree)
         
@@ -396,6 +402,16 @@ class ToolboxWidget(QWidget):
     
     def mouseMoveEvent(self, event):
         """Override to handle drag and drop of nodes."""
+        # Only start drag if mouse has moved far enough (prevents accidental drags)
+        if not (event.buttons() & Qt.LeftButton):
+            super().mouseMoveEvent(event)
+            return
+            
+        # Check if mouse has moved far enough to start a drag
+        if (event.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+            super().mouseMoveEvent(event)
+            return
+            
         # Check if a node item is selected
         selected_item = self.node_tree.currentItem()
         if selected_item is None or selected_item.parent() is None:
@@ -408,29 +424,57 @@ class ToolboxWidget(QWidget):
         if not node_type:
             super().mouseMoveEvent(event)
             return
+        
+        try:
+            # Create node data
+            node_data = self.create_new_node(node_type)
+            node_json = json.dumps(node_data)
             
-        # Start drag operation
-        drag = QDrag(self)
-        mime_data = QMimeData()
-        
-        # Create node data
-        node_data = self.create_new_node(node_type)
-        
-        # Set MIME data with JSON serialized node data
-        mime_data.setText(json.dumps(node_data))
-        mime_data.setData("application/x-node", json.dumps(node_data).encode())
-        
-        # Set drag pixmap
-        pixmap = QPixmap(100, 30)
-        pixmap.fill(QColor(100, 100, 180))
-        drag.setPixmap(pixmap)
-        
-        # Set MIME data and start drag
-        drag.setMimeData(mime_data)
-        drag.setHotSpot(QPoint(pixmap.width() // 2, pixmap.height() // 2))
-        
-        # Execute drag
-        result = drag.exec_(Qt.CopyAction)
+            # Start drag operation
+            drag = QDrag(self)
+            mime_data = QMimeData()
+            
+            # Set MIME data with JSON serialized node data
+            mime_data.setText(node_json)
+            mime_data.setData("application/x-node", node_json.encode())
+            
+            # Create a more visual drag pixmap with node name
+            pixmap = QPixmap(120, 40)
+            pixmap.fill(QColor(80, 80, 180, 200))
+            
+            # Add node name to pixmap
+            from PySide6.QtGui import QPainter, QFont, QColor, QPen
+            painter = QPainter(pixmap)
+            painter.setPen(QPen(QColor(255, 255, 255)))
+            font = QFont()
+            font.setBold(True)
+            painter.setFont(font)
+            node_name = self.node_info[node_type]["name"]
+            painter.drawText(pixmap.rect(), Qt.AlignCenter, node_name)
+            painter.end()
+            
+            # Set drag pixmap
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(QPoint(pixmap.width() // 2, pixmap.height() // 2))
+            
+            # Set MIME data
+            drag.setMimeData(mime_data)
+            
+            # Execute drag
+            if hasattr(self.main_window, "log_console"):
+                self.main_window.log_console.log(f"Starting drag for {node_name}")
+                
+            # Execute drag
+            result = drag.exec_(Qt.CopyAction)
+            
+            # Signal that a node was dragged (whether dropped successfully or not)
+            if result == Qt.IgnoreAction:
+                if hasattr(self.main_window, "log_console"):
+                    self.main_window.log_console.log(f"Drag cancelled for {node_name}")
+            
+        except Exception as e:
+            if hasattr(self.main_window, "log_console"):
+                self.main_window.log_console.log(f"Error in drag: {str(e)}", "ERROR")
         
     def dragEnterEvent(self, event):
         """Handle drag enter events."""
@@ -445,3 +489,12 @@ class ToolboxWidget(QWidget):
             event.acceptProposedAction()
         else:
             event.ignore()
+            
+    def _tree_mousePressEvent(self, event):
+        """Custom handler for mouse press events on the tree widget."""
+        # Store the position for potential drag operations
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.pos()
+            
+        # Call the original event handler
+        QTreeWidget.mousePressEvent(self.node_tree, event)

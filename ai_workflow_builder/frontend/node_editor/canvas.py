@@ -341,6 +341,10 @@ class NodeEditorCanvas(QWidget):
         self.setAcceptDrops(True)
         # Make sure the graph widget also accepts drops
         self.graph_widget.setAcceptDrops(True)
+        
+        # Connect graph widget drop events to our handlers
+        self.installEventFilter(self)
+        self.graph_widget.installEventFilter(self)
     
     def clear(self):
         """Clear the canvas."""
@@ -676,6 +680,9 @@ class NodeEditorCanvas(QWidget):
             # Create the node
             self._create_node_from_config(node_config)
             
+            # Emit workflow modified signal
+            self.workflow_modified.emit()
+            
             # Log success
             if hasattr(self.main_window, "log_console"):
                 self.main_window.log_console.log(f"Added node: {node_config.get('name', '')}")
@@ -684,11 +691,14 @@ class NodeEditorCanvas(QWidget):
             if hasattr(self.main_window, "modified"):
                 self.main_window.modified = True
                 self.main_window.update_title()
+                
+            return True
         
         except Exception as e:
             # Log error
             if hasattr(self.main_window, "log_console"):
                 self.main_window.log_console.log(f"Error adding node: {str(e)}", "ERROR")
+            return False
     
     def update_node(self, node_id: str, updated_node: Dict[str, Any]):
         """
@@ -734,21 +744,55 @@ class NodeEditorCanvas(QWidget):
         else:
             event.ignore()
     
+    def eventFilter(self, obj, event):
+        """Filter events to handle drops on graph widget."""
+        if (obj == self.graph_widget and event.type() == event.DragEnter):
+            # Forward the drag enter event
+            self.dragEnterEvent(event)
+            return True
+        elif (obj == self.graph_widget and event.type() == event.DragMove):
+            # Forward the drag move event
+            self.dragMoveEvent(event)
+            return True
+        elif (obj == self.graph_widget and event.type() == event.Drop):
+            # Forward the drop event
+            self.dropEvent(event)
+            return True
+        
+        # Pass other events through
+        return super().eventFilter(obj, event)
+    
     def dropEvent(self, event):
         """Handle drop events for nodes."""
-        if event.mimeData().hasFormat("application/x-node"):
-            # Get the node data
-            node_data = json.loads(bytes(event.mimeData().data("application/x-node")).decode())
-            
-            # Get drop position relative to the graph widget
-            pos = self.graph_widget.mapFromParent(event.pos())
-            
-            # Update node position
-            node_data["position"] = {"x": pos.x(), "y": pos.y()}
-            
-            # Add the node
-            self.add_node(node_data)
-            
-            event.acceptProposedAction()
+        if event.mimeData().hasFormat("application/x-node") or event.mimeData().hasText():
+            try:
+                # Try getting node data from MIME data
+                if event.mimeData().hasFormat("application/x-node"):
+                    node_data_str = bytes(event.mimeData().data("application/x-node")).decode()
+                else:
+                    node_data_str = event.mimeData().text()
+                
+                # Parse the node data
+                node_data = json.loads(node_data_str)
+                
+                # Get drop position relative to the graph widget
+                pos = event.pos()
+                if hasattr(self, 'graph_widget'):
+                    pos = self.graph_widget.mapFromParent(pos)
+                
+                # Update node position
+                node_data["position"] = {"x": pos.x(), "y": pos.y()}
+                
+                # Add the node
+                success = self.add_node(node_data)
+                
+                if success and hasattr(self.main_window, "log_console"):
+                    self.main_window.log_console.log(f"Node dropped successfully at ({pos.x()}, {pos.y()})")
+                
+                event.acceptProposedAction()
+            except Exception as e:
+                if hasattr(self.main_window, "log_console"):
+                    self.main_window.log_console.log(f"Error in drop event: {str(e)}", "ERROR")
+                event.ignore()
         else:
             event.ignore()
