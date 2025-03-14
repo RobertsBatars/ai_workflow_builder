@@ -285,7 +285,7 @@ class NodeEditorCanvas(QWidget):
         # Connect signals
         self.graph.node_selected.connect(self._on_node_selected)
         self.graph.node_created.connect(self._on_node_created)
-        self.graph.node_deleted.connect(self._on_node_deleted)
+        self.graph.nodes_deleted.connect(self._on_node_deleted)
         
         try:
             self.graph.port_connected.connect(self._on_port_connected)
