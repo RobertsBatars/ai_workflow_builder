@@ -24,33 +24,52 @@ A cross-platform Python application for creating AI agent workflows using a node
 - Python 3.8 or higher
 - PIP package manager
 
-### Install from PyPI
-
-```bash
-pip install ai-workflow-builder
-```
-
 ### Install from Source
 
+#### Linux/macOS
+
 ```bash
-git clone https://github.com/yourusername/ai-workflow-builder.git
-cd ai-workflow-builder
+git clone https://github.com/RobertsBatars/ai_workflow_builder.git
+cd ai_workflow_builder
 pip install -e .
+```
+
+#### Windows
+
+```powershell
+git clone https://github.com/RobertsBatars/ai_workflow_builder.git
+cd ai_workflow_builder
+python -m pip install -e .
 ```
 
 ## Usage
 
 ### Starting the Application
 
+#### Linux/macOS
+
 ```bash
 # Start the full application (GUI + API server)
-ai-workflow-builder
+python -m ai_workflow_builder
 
 # Start in headless mode (API server only)
-ai-workflow-builder --headless
+python -m ai_workflow_builder --headless
 
-# Start with custom host and port
-ai-workflow-builder --host 0.0.0.0 --port 8888
+# Start with custom port
+python -m ai_workflow_builder --port 8888
+```
+
+#### Windows
+
+```powershell
+# Start the full application (GUI + API server)
+python -m ai_workflow_builder
+
+# Start in headless mode (API server only)
+python -m ai_workflow_builder --headless
+
+# Start with custom port
+python -m ai_workflow_builder --port 8888
 ```
 
 ### Command Line Options
@@ -65,10 +84,20 @@ ai-workflow-builder --host 0.0.0.0 --port 8888
 
 ### Setting Up Development Environment
 
+#### Linux/macOS
+
 ```bash
-git clone https://github.com/yourusername/ai-workflow-builder.git
-cd ai-workflow-builder
-pip install -e ".[dev]"
+git clone https://github.com/RobertsBatars/ai_workflow_builder.git
+cd ai_workflow_builder
+pip install -r ai_workflow_builder/requirements.txt
+```
+
+#### Windows
+
+```powershell
+git clone https://github.com/RobertsBatars/ai_workflow_builder.git
+cd ai_workflow_builder
+python -m pip install -r ai_workflow_builder/requirements.txt
 ```
 
 ### Project Structure
