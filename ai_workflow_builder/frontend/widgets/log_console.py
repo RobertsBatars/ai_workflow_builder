@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QPushButton, QComboBox, QLabel
 )
 from PySide6.QtCore import Qt, Signal, Slot, QTimer
-from PySide6.QtGui import QTextCharFormat, QColor, QBrush
+from PySide6.QtGui import QTextCharFormat, QColor, QBrush, QTextCursor
 
 
 class LogConsole(QWidget):
@@ -148,7 +148,7 @@ class LogConsole(QWidget):
         format.setForeground(QBrush(self.log_colors[level]))
         
         # Add the formatted message
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.End)
         cursor.insertText(formatted_message + "\n", format)
     
     def clear_logs(self):
