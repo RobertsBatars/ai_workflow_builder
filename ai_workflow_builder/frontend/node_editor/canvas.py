@@ -11,10 +11,11 @@ from PySide6.QtCore import Qt, Signal, Slot, QPointF
 from PySide6.QtGui import QColor
 
 # NodeGraphQt imports
-from NodeGraphQt import (
-    NodeGraph, NodeBaseWidget, BackdropNode, 
-    Port, NodeFactory, PropertiesBinWidget
-)
+from NodeGraphQt import NodeGraph
+from NodeGraphQt.base.node import NodeObject as NodeBaseWidget
+from NodeGraphQt.widgets.backdrop import BackdropNode
+from NodeGraphQt.base.port import Port
+from NodeGraphQt.widgets.properties import PropertiesBinWidget
 
 
 # Define node classes for the different node types
@@ -688,7 +689,14 @@ class NodeEditorCanvas(QWidget):
                 # Get drop position relative to the graph widget
                 pos = event.pos()
                 if hasattr(self, 'graph_widget'):
+                    # Convert position to graph widget coordinates
                     pos = self.graph_widget.mapFromParent(pos)
+                    
+                    # Get the actual node graph viewer 
+                    viewer = self.graph.viewer()
+                    if viewer:
+                        # Convert to scene coordinates if we have a viewer
+                        pos = viewer.mapToScene(pos)
                 
                 # Update node position
                 node_data["position"] = {"x": pos.x(), "y": pos.y()}
@@ -696,8 +704,8 @@ class NodeEditorCanvas(QWidget):
                 # Add the node
                 success = self.add_node(node_data)
                 
-                if success and hasattr(self.main_window, "log_console"):
-                    self.main_window.log_console.log(f"Node dropped successfully at ({pos.x()}, {pos.y()})")
+                if hasattr(self.main_window, "log_console"):
+                    self.main_window.log_console.log(f"Node dropped at ({pos.x()}, {pos.y()})")
                 
                 event.acceptProposedAction()
             except Exception as e:
