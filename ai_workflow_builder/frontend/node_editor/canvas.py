@@ -323,7 +323,23 @@ class NodeEditorCanvas(QWidget):
     
     def clear(self):
         """Clear the canvas."""
-        self.graph.clear()
+        # Get all nodes and delete them
+        if hasattr(self.graph, 'all_nodes'):
+            for node in self.graph.all_nodes():
+                self.graph.delete_node(node)
+        else:
+            # Try different methods based on NodeGraphQt versions
+            try:
+                # Try remove_node on each node in the map
+                for node_id, node in list(self.node_map.items()):
+                    try:
+                        self.graph.delete_node(node)
+                    except:
+                        pass
+            except:
+                pass
+        
+        # Clear node map regardless
         self.node_map = {}
     
     def load_workflow(self, workflow: Dict[str, Any]):
