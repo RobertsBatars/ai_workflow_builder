@@ -1,0 +1,238 @@
+### **Blueprint: Node-Based AI Agent Workflow Builder**  
+**Objective**: Build a cross-platform (Windows/Linux) Python application for creating AI agent workflows using a node-based interface. Users can drag-and-drop nodes (LLMs, tools, logic, storage), configure them, and export/share workflows as self-contained JSON files. Includes sub-workflows (composite nodes), state saving, and lightweight vector storage.  
+
+---
+
+### **Core Features**  
+1. **Node Types**:  
+   - **LLM Node**: Run local/remote models (via LiteLLM), attach tools, validate JSON outputs.  
+   - **Decision Node**: Branch workflows using Python expressions (e.g., `result_count > 0`).  
+   - **Composite Node**: Encapsulate sub-workflows into reusable nodes (like functions).  
+   - **Storage Node**:  
+     - **Static**: Store text/key-value data.  
+     - **Vector**: FAISS/SQLite for embeddings (no external DB required).  
+   - **Custom Python Node**: Execute user code in sandboxed environments.  
+   - **Tool Node**: Prebuilt (web search, file I/O) or user-defined tools.  
+
+2. **Workflow Management**:  
+   - **JSON Export/Import**: Save and load workflows, including custom tools and sub-workflows.  
+   - **AI-Generated Workflows**: Use LLMs to convert natural language to JSON templates.  
+
+3. **Execution**:  
+   - **DAG Execution**: Async execution with topological sorting.  
+   - **Virtualization**: Docker-based sandboxing (user-selectable: none, lightweight, Ubuntu).  
+   - **Error Handling**: Retries, logging, and user alerts.  
+
+4. **State Management**:  
+   - **Checkpoints**: Autosave progress periodically and on crashes.  
+   - **Resume**: Load saved states to continue interrupted workflows.  
+
+5. **Security**:  
+   - Warn users about unsafe operations (e.g., code execution without Docker).  
+   - Isolate tools/nodes using Docker containers.  
+
+---
+
+### **Architecture**  
+#### **Frontend (GUI)**  
+- **Framework**: PySide6 (Qt) + NodeGraphQt for the node editor.  
+- **UI Components**:  
+  - **Canvas**: Drag-and-drop nodes, draw connections.  
+  - **Toolbox**: Prebuilt nodes/tools.  
+  - **Property Panel**: Configure node parameters (e.g., LLM prompts, API URLs).  
+  - **Log Console**: Display execution status/errors.  
+- **IPC**: FastAPI (HTTP) or ZeroMQ for frontend-backend communication.  
+
+#### **Backend (Logic)**  
+- **Core Libraries**:  
+  - **LiteLLM**: Unified API for OpenAI, Anthropic, Ollama, etc.  
+  - **FAISS**: Vector storage (local, no server).  
+  - **Docker SDK**: Sandboxed execution for tools/custom code.  
+  - **Pydantic**: Validate node/tool configurations.  
+  - **Watchdog**: Monitor files for autosave triggers.  
+- **Key Components**:  
+  - **Node Registry**: Factory to create nodes from JSON.  
+  - **Workflow Runner**: Execute nodes asynchronously in dependency order.  
+  - **State Manager**: Save/load checkpoints (JSON files).  
+  - **Tool Manager**: Load prebuilt/custom tools.  
+
+#### **Data Schemas**  
+1. **Node Config** (Pydantic):  
+```python  
+class NodeConfig(BaseModel):  
+    id: str  
+    type: str  # "llm", "composite", "vector_storage"  
+    position: Tuple[int, int]  
+    parameters: Dict[str, Any]  # Model-specific settings  
+```  
+
+2. **Workflow JSON**:  
+```json  
+{  
+  "nodes": [  
+    {  
+      "type": "llm",  
+      "parameters": {  
+        "model": "gpt-4",  
+        "system_prompt": "You are a researcher...",  
+        "tools": [{"name": "web_search", "api_url": "https://..."}]  
+      }  
+    },  
+    {  
+      "type": "composite",  
+      "parameters": {  
+        "workflow_json": { /* Embedded sub-workflow */ }  
+      }  
+    }  
+  ],  
+  "connections": [{"source": "node1", "target": "node2"}],  
+  "tools": [  
+    {  
+      "name": "custom_tool",  
+      "code": "def run(input): return ..."  
+    }  
+  ],  
+  "environment": {  
+    "virtualization": "docker_ubuntu"  
+  }  
+}  
+```  
+
+---
+
+### **Implementation Steps**  
+1. **Setup**:  
+```bash  
+# Dependencies  
+pip install pyside6 litellm faiss-cpu docker fastapi pydantic watchdog  
+```  
+
+2. **Frontend**:  
+   - **Node Editor**: Use `NodeGraphQt` to render nodes/connections.  
+   - **Property Panels**:  
+     - Dropdowns for model selection (LiteLLM providers).  
+     - Code editors for custom Python nodes.  
+     - Input fields for tool parameters (e.g., API URLs).  
+
+3. **Backend**:  
+   - **Base Classes**:  
+     - `BaseNode`: Abstract class for all nodes.  
+     - `BaseTool`: Tools with configurable parameters.  
+   - **Execution Engine**:  
+     - Parse JSON workflows into a DAG.  
+     - Use `asyncio` for parallel node execution.  
+   - **Sandboxing**:  
+     - Docker containers for code execution (selectable via `environment.virtualization`).  
+
+4. **Composite Nodes**:  
+   - **GUI**: Allow users to group nodes → right-click → "Create Composite Node".  
+   - **Serialization**: Embed sub-workflow JSON in parent workflow.  
+
+5. **Storage Nodes**:  
+   - **Static**: Store text/data in-memory or in SQLite.  
+   - **Vector**: Use FAISS to index/search embeddings.  
+
+6. **State Management**:  
+   - **Autosave**: Save checkpoints every 5 minutes or on file changes.  
+   - **Crash Recovery**: Load latest checkpoint on app restart.  
+
+---
+
+### **Code Snippets**  
+#### **Composite Node Execution**  
+```python  
+class CompositeNode(BaseNode):  
+    async def execute(self, input_data: Dict) -> Dict:  
+        # Load sub-workflow from JSON  
+        sub_workflow = WorkflowRunner(self.config.parameters["workflow_json"])  
+        return await sub_workflow.execute(input_data)  
+```  
+
+#### **FAISS Vector Storage**  
+```python  
+import faiss  
+import numpy as np  
+
+class VectorStorage:  
+    def __init__(self, dimension: int = 768):  
+        self.index = faiss.IndexFlatL2(dimension)  
+
+    def add_embedding(self, embedding: List[float]):  
+        self.index.add(np.array([embedding], dtype=np.float32))  
+
+    def search(self, query: List[float], k: int = 3) -> List[int]:  
+        distances, indices = self.index.search(np.array([query], dtype=np.float32), k)  
+        return indices[0].tolist()  
+```  
+
+#### **State Checkpointing**  
+```python  
+class StateManager:  
+    def save(self, workflow: Workflow, path: str):  
+        state = {  
+            "nodes": [node.to_dict() for node in workflow.nodes],  
+            "connections": workflow.connections,  
+            "timestamp": time.time()  
+        }  
+        with open(path, "w") as f:  
+            json.dump(state, f)  
+
+    def load(self, path: str) -> Workflow:  
+        with open(path, "r") as f:  
+            state = json.load(f)  
+        return Workflow.from_dict(state)  
+```  
+
+---
+
+### **Project Structure**  
+```  
+ai_workflow_builder/  
+├── frontend/                  # PySide6 GUI  
+│   ├── main_window.py         # Main window setup  
+│   ├── node_editor/           # NodeGraphQt integration  
+│   ├── widgets/               # Property panels, toolboxes  
+│   └── utils/                 # Helper functions  
+├── backend/  
+│   ├── nodes/                 # Node classes (LLM, decision, etc.)  
+│   ├── tools/                 # Web search, file I/O, custom tools  
+│   ├── storage/               # FAISS/SQLite storage logic  
+│   ├── workflows.py           # DAG execution engine  
+│   ├── state_manager.py       # Checkpointing logic  
+│   └── api.py                 # FastAPI/ZMQ endpoints  
+├── shared/                    # Schemas, constants  
+├── tests/                     # Unit/integration tests  
+├── checkpoints/               # Autosave files  
+└── requirements.txt           # Dependencies  
+```  
+
+---
+
+### **Example Workflow**  
+**Goal**: Research a topic, store results in a vector DB, and generate a report.  
+1. **Nodes**:  
+   - **Composite Node ("Research Assistant")**:  
+     - LLM Node (generate search queries) → Web Search Tool → Vector Storage Node.  
+   - **LLM Node ("Report Writer")**: Use results from Vector Storage.  
+2. **Execution**:  
+   - Run the composite node to fetch/store data.  
+   - Query vector DB for relevant info → generate report.  
+3. **Export**: Save as JSON, including the composite node’s sub-workflow.  
+
+---
+
+### **Key Considerations**  
+- **Security**:  
+  - Isolate custom code in Docker containers.  
+  - Encrypt API keys using system keyrings.  
+- **Performance**:  
+  - Limit parallel nodes based on CPU/RAM.  
+  - Cache Docker images to reduce startup time.  
+- **Extensibility**:  
+  - Allow users to add plugins (new node types/tools).  
+- **Documentation**:  
+  - Tutorials for creating workflows, custom tools, and composite nodes.  
+
+---
+
+This blueprint provides all details needed to build the application, including architecture, code structure, and implementation steps. Use it as the single source of truth!
