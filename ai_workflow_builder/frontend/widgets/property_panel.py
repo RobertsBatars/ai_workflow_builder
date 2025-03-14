@@ -222,11 +222,101 @@ class PropertyPanel(QWidget):
         elif node_type == "python":
             # Python Node specific fields
             self._add_group_box("Python Configuration")
+            
+            # Security warning box
+            warning_box = QGroupBox("⚠️ Security Warning")
+            warning_box.setStyleSheet("QGroupBox { border: 1px solid red; }")
+            warning_layout = QVBoxLayout(warning_box)
+            
+            warning_label = QLabel(
+                "Executing custom Python code may pose security risks. "
+                "Use Docker virtualization when running untrusted code."
+            )
+            warning_label.setWordWrap(True)
+            warning_label.setStyleSheet("color: red;")
+            warning_layout.addWidget(warning_label)
+            
+            # Virtualization settings
+            virt_layout = QHBoxLayout()
+            virt_label = QLabel("Virtualization:")
+            virt_combo = QComboBox()
+            virt_combo.addItems(["none", "lightweight", "ubuntu"])
+            virt_combo.setToolTip(
+                "none: No isolation, runs directly in Python process (unsafe for untrusted code)\n"
+                "lightweight: Docker container with minimal Python image\n"
+                "ubuntu: Docker container with full Ubuntu system and Python"
+            )
+            
+            # Get the current value from workflow environment or default to lightweight
+            virt_value = "lightweight"
+            if "virtualization" in parameters:
+                virt_value = parameters.get("virtualization", "lightweight")
+            
+            # Set the combo box to the current value
+            index = virt_combo.findText(virt_value)
+            if index >= 0:
+                virt_combo.setCurrentIndex(index)
+            
+            # Connect the combo box to update function
+            def update_virtualization(text):
+                self.property_values["parameters.virtualization"] = text
+                
+                # Show additional warning if "none" is selected
+                if text == "none":
+                    from PySide6.QtWidgets import QMessageBox
+                    QMessageBox.warning(
+                        self,
+                        "Security Risk",
+                        "Running Python code without virtualization is a security risk. "
+                        "Only use this setting for trusted code in a secure environment."
+                    )
+            
+            virt_combo.currentTextChanged.connect(update_virtualization)
+            
+            virt_layout.addWidget(virt_label)
+            virt_layout.addWidget(virt_combo)
+            warning_layout.addLayout(virt_layout)
+            
+            # Add the warning box to the form
+            self.form_layout.addRow("", warning_box)
+            
+            # Code editor
             self._add_text_area("Code:", parameters.get("code", ""), "parameters.code", font_family="monospace")
             
-            # Requirements section (placeholder)
+            # Timeout setting
+            timeout_layout = QHBoxLayout()
+            timeout_label = QLabel("Execution Timeout (seconds):")
+            timeout_spin = QSpinBox()
+            timeout_spin.setMinimum(1)
+            timeout_spin.setMaximum(300)  # 5 minutes max
+            timeout_spin.setValue(parameters.get("timeout", 30))
+            
+            def update_timeout(value):
+                self.property_values["parameters.timeout"] = value
+            
+            timeout_spin.valueChanged.connect(update_timeout)
+            timeout_layout.addWidget(timeout_label)
+            timeout_layout.addWidget(timeout_spin)
+            self.form_layout.addRow("", timeout_layout)
+            
+            # Requirements section
             self._add_group_box("Requirements")
-            self._add_label("Requirements configuration coming soon...")
+            reqs_layout = QVBoxLayout()
+            reqs_label = QLabel("List of required packages (one per line):")
+            reqs_text = QTextEdit()
+            reqs_text.setPlainText("\n".join(parameters.get("requirements", [])))
+            reqs_text.setMaximumHeight(100)
+            
+            def update_requirements():
+                # Parse requirements from text
+                req_text = reqs_text.toPlainText()
+                req_list = [r.strip() for r in req_text.split("\n") if r.strip()]
+                self.property_values["parameters.requirements"] = req_list
+            
+            reqs_text.textChanged.connect(update_requirements)
+            reqs_layout.addWidget(reqs_label)
+            reqs_layout.addWidget(reqs_text)
+            self.form_layout.addRow("", reqs_layout)
         
         elif node_type == "tool":
             # Tool Node specific fields

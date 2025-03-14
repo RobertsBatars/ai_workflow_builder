@@ -4,27 +4,66 @@ State management system for saving and loading workflow states.
 import os
 import json
 import time
+import threading
+import traceback
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
+
+import watchdog.events
+import watchdog.observers
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from ..shared.models import StateCheckpoint, WorkflowConfig
+from ..shared import logger
+
+
+class FileChangeHandler(FileSystemEventHandler):
+    """Handler for file system events."""
+    def __init__(self, callback: Callable):
+        self.callback = callback
+        
+    def on_modified(self, event):
+        if not event.is_directory:
+            self.callback(event.src_path)
 
 
 class StateManager:
     """
     Manages saving and loading workflow states.
-    Implements checkpointing and crash recovery.
+    Implements checkpointing, crash recovery, and autosave.
     """
-    def __init__(self, checkpoint_dir: str = None):
+    def __init__(self, checkpoint_dir: str = None, autosave_interval: int = 300):
         """
         Initialize the state manager.
         
         Args:
             checkpoint_dir: Directory to store checkpoint files.
                            Defaults to 'checkpoints' in the current directory.
+            autosave_interval: Interval in seconds for autosaving (default: 5 minutes)
         """
         self.checkpoint_dir = checkpoint_dir or os.path.join(os.getcwd(), "checkpoints")
         os.makedirs(self.checkpoint_dir, exist_ok=True)
+        
+        # Current workflow and modification time
+        self.current_workflow = None
+        self.last_modified_time = 0
+        self.last_autosave_time = 0
+        self.autosave_interval = autosave_interval
+        
+        # File system observer for detecting changes
+        self.observer = None
+        self.file_handler = None
+        
+        # Autosave timer
+        self.autosave_timer = None
+        self.running = False
+        
+        # Start the autosave timer
+        self._start_autosave_timer()
+        
+        # Check for crash recovery on startup
+        self._check_for_crash_recovery()
     
     def save(self, workflow: Dict[str, Any], path: Optional[str] = None) -> str:
         """
@@ -141,11 +180,23 @@ class StateManager:
         Returns:
             The path where the state was saved.
         """
+        # Update current workflow
+        self.current_workflow = workflow
+        self.last_modified_time = time.time()
+        
         # Generate an autosave filename
         path = os.path.join(self.checkpoint_dir, "autosave.json")
         
-        # Save the workflow
-        return self.save(workflow, path)
+        try:
+            # Save the workflow
+            saved_path = self.save(workflow, path)
+            self.last_autosave_time = time.time()
+            logger.info(f"Workflow autosaved to {saved_path}")
+            return saved_path
+        except Exception as e:
+            logger.error(f"Error autosaving workflow: {str(e)}")
+            traceback.print_exc()
+            return ""
     
     def load_autosave(self) -> Optional[Dict[str, Any]]:
         """
@@ -157,6 +208,114 @@ class StateManager:
         path = os.path.join(self.checkpoint_dir, "autosave.json")
         
         if os.path.exists(path):
-            return self.load(path)
+            try:
+                workflow = self.load(path)
+                self.current_workflow = workflow
+                logger.info(f"Loaded autosave from {path}")
+                return workflow
+            except Exception as e:
+                logger.error(f"Error loading autosave: {str(e)}")
+                return None
         
         return None
+    
+    def _start_autosave_timer(self):
+        """Start the autosave timer."""
+        if self.autosave_timer is not None:
+            return
+            
+        self.running = True
+        
+        def autosave_loop():
+            while self.running:
+                time.sleep(min(30, self.autosave_interval))  # Check every 30 seconds or less
+                
+                try:
+                    current_time = time.time()
+                    
+                    # Check if it's time to autosave
+                    if (self.current_workflow is not None and 
+                        current_time - self.last_autosave_time >= self.autosave_interval and
+                        self.last_modified_time > self.last_autosave_time):
+                        
+                        logger.info("Performing periodic autosave")
+                        self.autosave(self.current_workflow)
+                except Exception as e:
+                    logger.error(f"Error in autosave timer: {str(e)}")
+        
+        # Start the timer thread
+        self.autosave_timer = threading.Thread(target=autosave_loop, daemon=True)
+        self.autosave_timer.start()
+        logger.info(f"Autosave timer started (interval: {self.autosave_interval}s)")
+    
+    def _stop_autosave_timer(self):
+        """Stop the autosave timer."""
+        self.running = False
+        if self.autosave_timer is not None:
+            self.autosave_timer.join(timeout=1.0)
+            self.autosave_timer = None
+    
+    def _start_file_monitoring(self, directory: str):
+        """
+        Start monitoring file changes in a directory.
+        
+        Args:
+            directory: Directory to monitor
+        """
+        if self.observer is not None:
+            return
+            
+        # Create a file handler
+        self.file_handler = FileChangeHandler(self._on_file_changed)
+        
+        # Create and start the observer
+        self.observer = Observer()
+        self.observer.schedule(self.file_handler, directory, recursive=True)
+        self.observer.start()
+        logger.info(f"File monitoring started for {directory}")
+    
+    def _stop_file_monitoring(self):
+        """Stop file monitoring."""
+        if self.observer is not None:
+            self.observer.stop()
+            self.observer.join()
+            self.observer = None
+    
+    def _on_file_changed(self, path: str):
+        """
+        Handle file change events.
+        
+        Args:
+            path: Path to the changed file
+        """
+        # Only handle relevant files (this would be customized based on what files to monitor)
+        if self.current_workflow is None:
+            return
+            
+        # Mark as modified
+        self.last_modified_time = time.time()
+        logger.debug(f"File changed: {path}")
+    
+    def _check_for_crash_recovery(self):
+        """Check for an autosave file on startup and offer recovery."""
+        autosave_path = os.path.join(self.checkpoint_dir, "autosave.json")
+        
+        if os.path.exists(autosave_path):
+            try:
+                # Get modification time of the autosave file
+                mtime = os.path.getmtime(autosave_path)
+                age = time.time() - mtime
+                
+                # Only consider recent autosaves (less than 1 day old)
+                if age < 86400:  # 24 hours
+                    formatted_time = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    logger.info(f"Found autosave file from {formatted_time} - available for recovery")
+                    
+                    # Note: The actual recovery would be initiated from the UI
+            except Exception as e:
+                logger.error(f"Error checking crash recovery: {str(e)}")
+    
+    def __del__(self):
+        """Clean up resources."""
+        self._stop_autosave_timer()
+        self._stop_file_monitoring()
