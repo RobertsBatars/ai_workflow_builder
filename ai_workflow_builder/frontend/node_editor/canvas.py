@@ -12,198 +12,224 @@ from PySide6.QtGui import QColor
 
 # NodeGraphQt imports with fallbacks
 try:
-    # Try standard imports first
+    # Import the NodeGraph class
     from NodeGraphQt import NodeGraph
-    from NodeGraphQt.qgraphics.node_backdrop import BackdropNode
-    from NodeGraphQt.qgraphics.node_base import NodeItem as NodeBaseWidget
-    from NodeGraphQt.qgraphics.port_item import PortItem as Port
-except ImportError as e:
-    # Try alternate structure for different versions
+    
+    # Import the proper node base class
     try:
-        from NodeGraphQt import NodeGraph, NodeItem as NodeBaseWidget, PortItem as Port
-        from NodeGraphQt.nodes.backdrop_node import BackdropNode
+        from NodeGraphQt import NodeObject
     except ImportError:
-        # If all else fails, just import what we can
-        from NodeGraphQt import NodeGraph
-        # Create stub classes for compatibility
-        class NodeBaseWidget:
-            def __init__(self, name=None):
-                self.name = name
-        class BackdropNode:
-            pass
-        class Port:
-            pass
+        try:
+            from NodeGraphQt.base.node import NodeObject
+        except ImportError:
+            from NodeGraphQt.nodes.base_node import NodeObject
+    
+    # Import the backdrop node
+    try:
+        from NodeGraphQt import BackdropNode
+    except ImportError:
+        try:
+            from NodeGraphQt.nodes.backdrop_node import BackdropNode
+        except ImportError:
+            BackdropNode = None
 
 
-# Define node classes for the different node types
-class LLMNode(NodeBaseWidget):
+# Import NodeGraph
+from NodeGraphQt import NodeGraph
+
+# Create proper node classes for NodeGraphQt
+class LLMNode(NodeObject):
     """LLM node for running language models."""
     
-    # Unique identifier
+    # Unique identifier for the node
     __identifier__ = 'ai_workflow_builder'
     
-    # Node type name
+    # Node name in the graph
     NODE_NAME = 'LLM Node'
     
+    # Set the node type (required by NodeGraphQt)
+    type_ = 'LLMNode'
+    
     def __init__(self):
-        super(LLMNode, self).__init__(name=self.NODE_NAME)
+        super(LLMNode, self).__init__(self.NODE_NAME)
         
         # Set node color
         self.set_color(20, 120, 180)
         
-        # Create input and output ports
-        self.add_input('prompt', color=(180, 80, 0))
-        self.add_input('system_prompt', color=(180, 80, 0))
-        self.add_input('temperature', color=(180, 80, 0))
-        self.add_input('tools', color=(180, 80, 0))
+        # Create input ports
+        self.add_input('prompt')
+        self.add_input('system_prompt')
+        self.add_input('temperature')
+        self.add_input('tools')
         
-        self.add_output('response', color=(0, 180, 80))
-        self.add_output('tool_calls', color=(0, 180, 80))
-        self.add_output('error', color=(180, 0, 0))
+        # Create output ports
+        self.add_output('response')
+        self.add_output('tool_calls')
+        self.add_output('error')
         
-        # Node properties
-        self.create_property('model', 'gpt-4', widget_type='line_edit')
-        self.create_property('system_prompt', 'You are a helpful assistant.', widget_type='text_edit')
-        self.create_property('temperature', 0.7, widget_type='float', range=(0.0, 2.0))
+        # Add properties
+        self.add_property('model', 'gpt-4')
+        self.add_property('system_prompt', 'You are a helpful assistant.')
+        self.add_property('temperature', 0.7)
+    
 
-
-class DecisionNode(NodeBaseWidget):
+class DecisionNode(NodeObject):
     """Decision node for conditional branching."""
     
-    # Unique identifier
+    # Unique identifier for the node
     __identifier__ = 'ai_workflow_builder'
     
-    # Node type name
+    # Node name in the graph
     NODE_NAME = 'Decision Node'
     
+    # Set the node type (required by NodeGraphQt)
+    type_ = 'DecisionNode'
+    
     def __init__(self):
-        super(DecisionNode, self).__init__(name=self.NODE_NAME)
+        super(DecisionNode, self).__init__(self.NODE_NAME)
         
         # Set node color
         self.set_color(180, 120, 20)
         
-        # Create input and output ports
-        self.add_input('value', color=(180, 80, 0))
-        self.add_input('condition', color=(180, 80, 0))
+        # Create input ports
+        self.add_input('value')
+        self.add_input('condition')
         
-        self.add_output('true', color=(0, 180, 80))
-        self.add_output('false', color=(180, 0, 0))
-        self.add_output('error', color=(180, 0, 0))
+        # Create output ports
+        self.add_output('true')
+        self.add_output('false')
+        self.add_output('error')
         
-        # Node properties
-        self.create_property('condition', 'input > 0', widget_type='line_edit')
-        self.create_property('true_port', 'true', widget_type='line_edit')
-        self.create_property('false_port', 'false', widget_type='line_edit')
+        # Add properties
+        self.add_property('condition', 'input > 0')
+        self.add_property('true_port', 'true')
+        self.add_property('false_port', 'false')
 
 
-class StorageNode(NodeBaseWidget):
+class StorageNode(NodeObject):
     """Storage node for static and vector storage."""
     
-    # Unique identifier
+    # Unique identifier for the node
     __identifier__ = 'ai_workflow_builder'
     
-    # Node type name
+    # Node name in the graph
     NODE_NAME = 'Storage Node'
     
+    # Set the node type (required by NodeGraphQt)
+    type_ = 'StorageNode'
+    
     def __init__(self):
-        super(StorageNode, self).__init__(name=self.NODE_NAME)
+        super(StorageNode, self).__init__(self.NODE_NAME)
         
         # Set node color
         self.set_color(120, 20, 180)
         
-        # Create input and output ports
-        self.add_input('key', color=(180, 80, 0))
-        self.add_input('value', color=(180, 80, 0))
-        self.add_input('operation', color=(180, 80, 0))
+        # Create input ports
+        self.add_input('key')
+        self.add_input('value')
+        self.add_input('operation')
         
-        self.add_output('result', color=(0, 180, 80))
-        self.add_output('success', color=(0, 180, 80))
-        self.add_output('error', color=(180, 0, 0))
+        # Create output ports
+        self.add_output('result')
+        self.add_output('success')
+        self.add_output('error')
         
-        # Node properties
-        self.create_property('storage_type', 'static', widget_type='combo', items=['static', 'vector'])
-        self.create_property('dimension', 768, widget_type='int', range=(1, 4096))
-        self.create_property('persist', False, widget_type='bool')
+        # Add properties
+        self.add_property('storage_type', 'static')
+        self.add_property('dimension', 768)
+        self.add_property('persist', False)
 
 
-class PythonNode(NodeBaseWidget):
+class PythonNode(NodeObject):
     """Python node for custom code execution."""
     
-    # Unique identifier
+    # Unique identifier for the node
     __identifier__ = 'ai_workflow_builder'
     
-    # Node type name
+    # Node name in the graph
     NODE_NAME = 'Python Node'
     
+    # Set the node type (required by NodeGraphQt)
+    type_ = 'PythonNode'
+    
     def __init__(self):
-        super(PythonNode, self).__init__(name=self.NODE_NAME)
+        super(PythonNode, self).__init__(self.NODE_NAME)
         
         # Set node color
         self.set_color(20, 180, 120)
         
-        # Create input and output ports
-        self.add_input('input', color=(180, 80, 0))
-        self.add_input('code', color=(180, 80, 0))
-        self.add_input('timeout', color=(180, 80, 0))
+        # Create input ports
+        self.add_input('input')
+        self.add_input('code')
+        self.add_input('timeout')
         
-        self.add_output('output', color=(0, 180, 80))
-        self.add_output('error', color=(180, 0, 0))
+        # Create output ports
+        self.add_output('output')
+        self.add_output('error')
         
-        # Node properties
-        self.create_property('code', 'def run(input_data):\n    # Your code here\n    return input_data', widget_type='text_edit')
-        self.create_property('requirements', [], widget_type='list')
+        # Add properties
+        self.add_property('code', 'def run(input_data):\n    # Your code here\n    return input_data')
+        self.add_property('requirements', [])
 
 
-class ToolNode(NodeBaseWidget):
+class ToolNode(NodeObject):
     """Tool node for using built-in or custom tools."""
     
-    # Unique identifier
+    # Unique identifier for the node
     __identifier__ = 'ai_workflow_builder'
     
-    # Node type name
+    # Node name in the graph
     NODE_NAME = 'Tool Node'
     
+    # Set the node type (required by NodeGraphQt)
+    type_ = 'ToolNode'
+    
     def __init__(self):
-        super(ToolNode, self).__init__(name=self.NODE_NAME)
+        super(ToolNode, self).__init__(self.NODE_NAME)
         
         # Set node color
         self.set_color(180, 20, 120)
         
-        # Create input and output ports
-        self.add_input('input', color=(180, 80, 0))
-        self.add_input('parameters', color=(180, 80, 0))
+        # Create input ports
+        self.add_input('input')
+        self.add_input('parameters')
         
-        self.add_output('output', color=(0, 180, 80))
-        self.add_output('error', color=(180, 0, 0))
+        # Create output ports
+        self.add_output('output')
+        self.add_output('error')
         
-        # Node properties
-        self.create_property('tool_name', '', widget_type='line_edit')
-        self.create_property('tool_parameters', {}, widget_type='dict')
+        # Add properties
+        self.add_property('tool_name', '')
+        self.add_property('tool_parameters', {})
 
 
-class CompositeNode(NodeBaseWidget):
+class CompositeNode(NodeObject):
     """Composite node for encapsulating sub-workflows."""
     
-    # Unique identifier
+    # Unique identifier for the node
     __identifier__ = 'ai_workflow_builder'
     
-    # Node type name
+    # Node name in the graph
     NODE_NAME = 'Composite Node'
     
+    # Set the node type (required by NodeGraphQt)
+    type_ = 'CompositeNode'
+    
     def __init__(self):
-        super(CompositeNode, self).__init__(name=self.NODE_NAME)
+        super(CompositeNode, self).__init__(self.NODE_NAME)
         
         # Set node color
         self.set_color(100, 100, 100)
         
-        # Create input and output ports
-        self.add_input('input', color=(180, 80, 0))
+        # Create input ports
+        self.add_input('input')
         
-        self.add_output('output', color=(0, 180, 80))
-        self.add_output('error', color=(180, 0, 0))
+        # Create output ports
+        self.add_output('output')
+        self.add_output('error')
         
-        # Node properties
-        self.create_property('workflow_json', {}, widget_type='dict')
+        # Add properties
+        self.add_property('workflow_json', {})
 
 
 class NodeEditorCanvas(QWidget):
@@ -223,20 +249,51 @@ class NodeEditorCanvas(QWidget):
         
         # Node graph
         self.graph = NodeGraph()
-        self.graph.register_node(LLMNode)
-        self.graph.register_node(DecisionNode)
-        self.graph.register_node(StorageNode)
-        self.graph.register_node(PythonNode)
-        self.graph.register_node(ToolNode)
-        self.graph.register_node(CompositeNode)
         
+        # Register all the node types
+        try:
+            # Registration must happen differently for different NodeGraphQt versions
+            try:
+                # Modern version method
+                from NodeGraphQt.nodes.factory import NodeFactory
+                factory = NodeFactory()
+                factory.register_node(LLMNode)
+                factory.register_node(DecisionNode)
+                factory.register_node(StorageNode)
+                factory.register_node(PythonNode)
+                factory.register_node(ToolNode)
+                factory.register_node(CompositeNode)
+                self.graph.register_nodes(factory)
+            except (ImportError, AttributeError):
+                # Older/different version method
+                self.graph.register_node(LLMNode)
+                self.graph.register_node(DecisionNode)
+                self.graph.register_node(StorageNode)
+                self.graph.register_node(PythonNode)
+                self.graph.register_node(ToolNode)
+                self.graph.register_node(CompositeNode)
+                
+            # Log successful registration
+            if hasattr(self.main_window, "log_console"):
+                self.main_window.log_console.log("Successfully registered node types")
+                
+        except Exception as e:
+            if hasattr(self.main_window, "log_console"):
+                self.main_window.log_console.log(f"Error registering nodes: {str(e)}", "ERROR")
+            print(f"Node registration error: {str(e)}")
+            
         # Connect signals
         self.graph.node_selected.connect(self._on_node_selected)
         self.graph.node_created.connect(self._on_node_created)
         self.graph.node_deleted.connect(self._on_node_deleted)
-        self.graph.port_connected.connect(self._on_port_connected)
-        self.graph.port_disconnected.connect(self._on_port_disconnected)
-        self.graph.property_changed.connect(self._on_property_changed)
+        
+        try:
+            self.graph.port_connected.connect(self._on_port_connected)
+            self.graph.port_disconnected.connect(self._on_port_disconnected)
+            self.graph.property_changed.connect(self._on_property_changed)
+        except (AttributeError, TypeError) as e:
+            if hasattr(self.main_window, "log_console"):
+                self.main_window.log_console.log(f"Warning: Some signals not connected: {str(e)}")
         
         # Set up UI
         self.setup_ui()
@@ -366,43 +423,61 @@ class NodeEditorCanvas(QWidget):
         node_name = config.get("name", "")
         position = config.get("position", {"x": 0, "y": 0})
         
-        # Map node type to NodeGraphQt node type
+        # Map node type to the proper class type
         type_mapping = {
-            "llm": LLMNode.NODE_NAME,
-            "decision": DecisionNode.NODE_NAME,
-            "storage": StorageNode.NODE_NAME,
-            "python": PythonNode.NODE_NAME,
-            "tool": ToolNode.NODE_NAME,
-            "composite": CompositeNode.NODE_NAME
+            "llm": "LLMNode",
+            "decision": "DecisionNode",
+            "storage": "StorageNode",
+            "python": "PythonNode",
+            "tool": "ToolNode",
+            "composite": "CompositeNode"
         }
         
-        # Create node
+        # Get the proper node type identifier
         graph_node_type = type_mapping.get(node_type)
         if not graph_node_type:
             raise ValueError(f"Unknown node type: {node_type}")
         
-        # Create the node
-        graph_node = self.graph.create_node(graph_node_type, name=node_name, pos=[position.get("x", 0), position.get("y", 0)])
-        
-        # Set the node ID
-        graph_node.set_property("id", node_id)
-        
-        # Set node properties
-        parameters = config.get("parameters", {})
-        for prop_name, prop_value in parameters.items():
-            if hasattr(graph_node, prop_name) or graph_node.has_property(prop_name):
-                graph_node.set_property(prop_name, prop_value)
-        
-        # Store in node map
-        self.node_map[node_id] = graph_node
-        
-        # Log node creation
-        if hasattr(self.main_window, "log_console"):
-            self.main_window.log_console.log(
-                f"Created {node_type} node: {node_name} at ({position.get('x', 0)}, {position.get('y', 0)})"
-            )
-        
-        return graph_node
+        try:
+            # Try to create the node
+            x_pos, y_pos = position.get("x", 0), position.get("y", 0)
+            graph_node = self.graph.create_node(graph_node_type, name=node_name, pos=[x_pos, y_pos])
+            
+            # If node was created, set its properties
+            if graph_node:
+                # Set node properties
+                parameters = config.get("parameters", {})
+                for prop_name, prop_value in parameters.items():
+                    try:
+                        # Try using add_property first (newer versions)
+                        if hasattr(graph_node, "add_property"):
+                            graph_node.add_property(prop_name, prop_value)
+                        # Fall back to set_property (older versions)
+                        elif hasattr(graph_node, "set_property"):
+                            graph_node.set_property(prop_name, prop_value)
+                    except:
+                        # Skip properties that can't be set
+                        pass
+                
+                # Store in node map - we'll use the node's real ID
+                node_actual_id = getattr(graph_node, "id", node_id)
+                self.node_map[node_actual_id] = graph_node
+                
+                # Log node creation
+                if hasattr(self.main_window, "log_console"):
+                    self.main_window.log_console.log(
+                        f"Created {node_type} node: {node_name} at ({x_pos}, {y_pos})"
+                    )
+            else:
+                raise ValueError(f"Failed to create node of type: {graph_node_type}")
+                
+            return graph_node
+            
+        except Exception as e:
+            if hasattr(self.main_window, "log_console"):
+                self.main_window.log_console.log(f"Error creating node: {str(e)}", "ERROR")
+            print(f"Error creating node: {str(e)}")
+            raise
     
     def _create_connection_from_config(self, config: Dict[str, Any]):
         """
