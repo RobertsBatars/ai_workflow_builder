@@ -323,7 +323,7 @@ class NodeEditorCanvas(QWidget):
     
     def clear(self):
         """Clear the canvas."""
-        self.graph.clear_all()
+        self.graph.clear()
         self.node_map = {}
     
     def load_workflow(self, workflow: Dict[str, Any]):
