@@ -9,16 +9,44 @@ from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Header, Request, status
-from fastapi.security import APIKeyHeader, OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+# Try to import security modules, which may require python-multipart
+try:
+    from fastapi.security import APIKeyHeader, OAuth2PasswordBearer, OAuth2PasswordRequestForm
+    security_imports_available = True
+except ImportError:
+    # Create mock security classes when modules aren't available
+    print("Warning: Security imports not available, using mock security classes")
+    class APIKeyHeader:
+        def __init__(self, name, auto_error=True):
+            self.name = name
+            self.auto_error = auto_error
+            
+        async def __call__(self, request: Request):
+            return None
+    
+    class OAuth2PasswordBearer:
+        def __init__(self, tokenUrl):
+            self.tokenUrl = tokenUrl
+            
+        async def __call__(self, request: Request):
+            return None
+    
+    class OAuth2PasswordRequestForm:
+        def __init__(self, username="", password=""):
+            self.username = username
+            self.password = password
+    
+    security_imports_available = False
 from pydantic import BaseModel, Field
 
-# Try to import jose and passlib, but provide fallbacks if not available
+# Check for required authentication and form packages
 try:
     from jose import JWTError, jwt
     from passlib.context import CryptContext
-    auth_available = True
+    auth_modules_available = True
 except ImportError:
     # Create mock objects for development without authentication
     print("Warning: Authentication modules not available, running with limited security")
@@ -54,7 +82,22 @@ except ImportError:
             import hashlib
             return hashlib.sha256(password.encode()).hexdigest() == hashed_password
     
-    auth_available = False
+    auth_modules_available = False
+
+# Check for python-multipart (needed for form data)
+try:
+    import multipart
+    form_data_available = True
+except ImportError:
+    try:
+        from starlette.datastructures import FormData
+        form_data_available = True
+    except ImportError:
+        print("Warning: python-multipart not available, form-based authentication disabled")
+        form_data_available = False
+
+# Set overall auth availability based on all requirements
+auth_available = auth_modules_available and form_data_available and security_imports_available
 
 from .workflows import WorkflowRunner
 from .state_manager import StateManager
@@ -69,8 +112,13 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 API_KEY_NAME = "X-API-Key"
 
-# Create password context for hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Create security-related objects if imports are available
+if auth_modules_available:
+    # Create password context for hashing
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+else:
+    # Fallback password context
+    pwd_context = CryptContext(schemes=["plaintext"], deprecated="auto")
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -367,8 +415,14 @@ else:
         })()
 
 
+# Define token request model to use when form data is not available
+class TokenRequest(BaseModel):
+    username: str
+    password: str
+
 # Authentication endpoints
 if auth_available:
+    # Use form-based authentication
     @app.post("/token", response_model=Token)
     async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
         """Login to get access token."""
@@ -398,10 +452,41 @@ if auth_available:
     async def read_users_me(current_user: User = Depends(get_current_active_user)):
         """Get current user information."""
         return current_user
+
+elif auth_modules_available and not form_data_available:
+    # Use JSON-based authentication when only python-multipart is missing
+    @app.post("/token", response_model=Token)
+    async def login_for_access_token(data: TokenRequest):
+        """Login to get access token using JSON instead of form data."""
+        user = authenticate_user(fake_users_db, data.username, data.password)
+        
+        if not user:
+            logger.warning(f"Failed login attempt for user: {data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Create access token
+        access_token_data = {"sub": user.username}
+        access_token, expires = create_access_token(access_token_data)
+        
+        logger.info(f"User {user.username} logged in successfully")
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            expires_at=expires
+        )
+
+    @app.get("/users/me", response_model=User)
+    async def read_users_me(current_user: User = Depends(get_current_active_user)):
+        """Get current user information."""
+        return current_user
 else:
     # Dummy authentication endpoints when auth modules are not available
     @app.post("/token")
-    async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    async def login_for_access_token():
         """Mock login endpoint when auth is not available."""
         return {
             "access_token": "mock_token_since_auth_modules_not_available",
