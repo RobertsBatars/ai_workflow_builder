@@ -4,6 +4,7 @@ Uses NodeGraphQt for node graph visualization and editing.
 """
 import uuid
 import json
+import sys
 from typing import Dict, Any, List, Tuple, Optional, Set
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QMessageBox
@@ -32,10 +33,9 @@ try:
             from NodeGraphQt.nodes.backdrop_node import BackdropNode
         except ImportError:
             BackdropNode = None
-
-
-# Import NodeGraph
-from NodeGraphQt import NodeGraph
+except ImportError as e:
+    print(f"Failed to import NodeGraphQt: {e}")
+    sys.exit(1)
 
 # Create proper node classes for NodeGraphQt
 class LLMNode(NodeObject):
