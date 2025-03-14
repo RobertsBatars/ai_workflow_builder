@@ -19,7 +19,17 @@ try:
 except ImportError:
     # Mock classes for documentation/development without NodeGraphQt
     class NodeGraph:
-        def __init__(self, parent=None): pass
+        def __init__(self, parent=None): 
+            # Create mock signals
+            from PySide6.QtCore import Signal
+            self.node_selected = Signal(object)
+            self.node_created = Signal(object)
+            self.node_deleted = Signal(object)
+            self.property_changed = Signal(object, str, object)
+            self.port_connected = Signal(object, object)
+            self.port_disconnected = Signal(object, object)
+            self.widget = QWidget()
+            
         def register_node(self, cls): pass
         def set_context_menu_from_file(self, path): pass
         def add_node(self, node_type, name=None, pos=None): return None
@@ -31,15 +41,62 @@ except ImportError:
         def set_pipe_layout(self, layout): pass
         def viewer(self): return None
         def model(self): return None
+        def clear_all(self): pass
+        def create_node(self, node_type, name=None, pos=None): return NodeBaseWidget(name)
+        def all_pipes(self): return []
         
     class NodeBaseWidget:
-        def __init__(self, name=None, parent=None): pass
+        def __init__(self, name=None, parent=None): 
+            self.name = name
+            self.id = str(uuid.uuid4())
+            self.type_ = name
+            self.properties = {}
+            self.inputs = {}
+            self.outputs = {}
+            
+        def set_property(self, prop_name, prop_value):
+            self.properties[prop_name] = prop_value
+            
+        def get_property(self, prop_name):
+            return self.properties.get(prop_name)
+            
+        def has_property(self, prop_name):
+            return prop_name in self.properties
+            
+        def add_input(self, name, **kwargs):
+            self.inputs[name] = Port(self, name)
+            
+        def add_output(self, name, **kwargs):
+            self.outputs[name] = Port(self, name)
+            
+        def input_ports(self):
+            return list(self.inputs.values())
+            
+        def output_ports(self):
+            return list(self.outputs.values())
+            
+        def create_property(self, name, value, **kwargs):
+            self.properties[name] = value
+            
+        def set_color(self, r, g, b):
+            pass
+            
+        def pos(self):
+            return [0, 0]
     
     class BackdropNode:
         def __init__(self, name=None): pass
     
     class Port:
-        def __init__(self, node=None, name=None): pass
+        def __init__(self, node=None, name=None): 
+            self.node = node
+            self._name = name
+            
+        def name(self):
+            return self._name
+            
+        def connect_to(self, port):
+            pass
     
     class NodeFactory:
         def __init__(self): pass
