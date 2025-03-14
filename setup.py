@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="ai-workflow-builder",
-    version="1.0.0",
+    version="1.0.0.dev0",
     author="AI Workflow Builder Team",
     description="A node-based interface for creating AI agent workflows",
     long_description=long_description,
